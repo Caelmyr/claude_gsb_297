@@ -24,12 +24,13 @@
     <div class="card">
       <h2>各求解器目标值</h2>
       <div class="chart-wrap" id="obj-chart"></div>
+      <p class="small muted" id="obj-chart-note" style="display:none"></p>
     </div>
 
     <div class="card">
       <h2>求解方案</h2>
       <table><thead><tr>
-        <th>求解器</th><th>状态</th><th class="num">目标值</th><th class="num">完工时间</th>
+        <th>求解器</th><th>优化目标</th><th>状态</th><th class="num">目标值</th><th class="num">完工时间</th>
         <th class="num">拖期</th><th class="num">成本</th><th class="num">耗时(s)</th><th></th>
       </tr></thead><tbody id="rows"></tbody></table>
     </div>
@@ -75,6 +76,7 @@ function renderTable() {
   document.getElementById('rows').innerHTML = solutions.map(s => `
     <tr style="cursor:pointer" onclick="showDetail('${s.id}')">
       <td>${escapeHtml(solverLabel(s.solver))}</td>
+      <td>${objectiveCell(s)}</td>
       <td>${statusBadge(s.status)}</td>
       <td class="num"><b>${fmt(s.objective_value)}</b></td>
       <td class="num">${fmt(s.makespan)}</td>
@@ -82,17 +84,29 @@ function renderTable() {
       <td class="num">${fmt(s.metrics?.resource_cost)}</td>
       <td class="num">${fmt(s.solve_time)}</td>
       <td><button class="btn sm" onclick="event.stopPropagation();loadDetail('${s.id}')">查看</button></td>
-    </tr>`).join('') || '<tr><td colspan="8" class="empty">暂无求解结果。</td></tr>';
+    </tr>`).join('') || '<tr><td colspan="9" class="empty">暂无求解结果。</td></tr>';
 }
 
 function renderObjectiveChart() {
   const el = document.getElementById('obj-chart');
-  if (!solutions.length) { el.innerHTML = '<div class="empty">暂无数据。</div>'; return; }
-  barChart(el, {
-    labels: solutions.map(s => solverLabel(s.solver)),
-    values: solutions.map(s => s.objective_value ?? 0),
-    color: '#4e79a7',
-  });
+  const note = document.getElementById('obj-chart-note');
+  // Multi-objective (Pareto) solutions live on the front chart; plotting one
+  // bar per front solution would flood this chart and misread the comparison.
+  const singles = solutions.filter(s => !isMultiObjective(s));
+  const nMulti = solutions.length - singles.length;
+  if (!singles.length) {
+    el.innerHTML = '<div class="empty">暂无单目标求解结果。</div>';
+  } else {
+    barChart(el, {
+      labels: singles.map(s => solverLabel(s.solver)),
+      values: singles.map(s => s.objective_value ?? 0),
+      color: '#4e79a7',
+    });
+  }
+  note.style.display = nMulti ? 'block' : 'none';
+  note.innerHTML = nMulti
+    ? `另有 ${nMulti} 个多目标（帕累托前沿）方案未在此图显示，请见 <a href="pareto.html${currentProblemId() ? '?id=' + encodeURIComponent(currentProblemId()) : ''}">帕累托前沿</a> 页。`
+    : '';
 }
 
 async function showDetail(id) { await loadDetail(id); }
@@ -102,16 +116,25 @@ async function loadDetail(id) {
   const s = await api(`/problems/${problem.id}/solutions/${id}`);
   document.getElementById('detail-card').style.display = 'block';
   document.getElementById('detail-title').textContent = `方案详情 — ${solverLabel(s.solver)}`;
-  document.getElementById('detail-stats').innerHTML = [
+  const stats = [
     ['目标值', fmt(s.objective_value)], ['完工时间', fmt(s.makespan)],
     ['状态', statusLabel(s.status)], ['耗时', fmt(s.solve_time) + 's'],
-  ].map(([l, v]) => `<div class="stat"><div class="label">${l}</div><div class="value">${v}</div></div>`).join('');
+  ];
+  // multi-objective runs: one tile per optimised objective (stored values)
+  for (const n of (s.objectives || [])) {
+    if ((s.objective_values || {})[n] !== undefined && (s.objectives || []).length > 1) {
+      stats.push([objectiveLabel(n), fmt(s.objective_values[n])]);
+    }
+  }
+  if (s.run_id) stats.push(['多目标运行', s.run_id]);
+  document.getElementById('detail-stats').innerHTML =
+    stats.map(([l, v]) => `<div class="stat"><div class="label">${l}</div><div class="value" style="font-size:${String(v).length > 14 ? '14px' : '24px'}">${v}</div></div>`).join('');
 
   const m = s.metrics || {};
   barChart(document.getElementById('comp-chart'), {
-    labels: ['完工时间', '加权\n完工时间', '拖期', '成本', '软约束\n惩罚'],
+    labels: ['完工时间', '加权\n完工时间', '拖期', '成本', '加班\n成本', '软约束\n惩罚'],
     values: [m.makespan || 0, m.weighted_completion || 0, m.total_tardiness || 0,
-             m.resource_cost || 0, m.soft_penalty || 0],
+             m.resource_cost || 0, m.overtime_cost || 0, m.soft_penalty || 0],
     color: '#f28e2b',
   });
 
@@ -123,7 +146,11 @@ async function loadDetail(id) {
       <td class="num">${a.end}</td><td class="small mono">${escapeHtml((a.resources || []).join(', '))}</td></tr>`).join('');
 }
 
-load().catch(e => toast(e.message, 'error'));
+load().then(() => {
+  // deep link: results.html?id=<problem>&solution=<solution_id>
+  const sid = new URLSearchParams(location.search).get('solution');
+  if (sid) loadDetail(sid).catch(() => {});
+}).catch(e => toast(e.message, 'error'));
 </script>
 </body>
 </html>

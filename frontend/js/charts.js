@@ -132,3 +132,108 @@ function lineChart(container, { labels, values, height = 240, color = '#2563eb',
   });
   return svg;
 }
+
+/* Scatter plot for Pareto fronts: points sorted by x and joined by a line.
+   If there are more than maxPoints points they are evenly down-sampled so a
+   huge front can never freeze the page; a note reports the sampling.  Points
+   are clickable (onSelect) and carry a native <title> tooltip. */
+function scatterChart(container, { points, xLabel = '', yLabel = '', height = 340,
+                                   maxPoints = 400, onSelect = null, selectedId = null,
+                                   color = '#2563eb', valueFmt = v => fmt(v) }) {
+  container.innerHTML = '';
+  if (!points.length) {
+    container.innerHTML = '<div class="empty">暂无数据。</div>';
+    return null;
+  }
+  const sorted = points.slice().sort((a, b) => a.x - b.x);
+  let pts = sorted;
+  let sampled = false;
+  if (sorted.length > maxPoints) {
+    sampled = true;
+    pts = [];
+    const step = sorted.length / maxPoints;
+    for (let i = 0; i < maxPoints; i++) pts.push(sorted[Math.floor(i * step)]);
+    // always keep the extremes of the front
+    if (pts[pts.length - 1] !== sorted[sorted.length - 1]) pts.push(sorted[sorted.length - 1]);
+  }
+
+  const W = 640, H = height, padL = 58, padB = 46, padT = 18, padR = 18;
+  const xs = pts.map(p => p.x), ys = pts.map(p => p.y);
+  const xMin = Math.min(...xs), xMax = Math.max(...xs);
+  const yMin = Math.min(...ys), yMax = Math.max(...ys);
+  const xPad = (xMax - xMin) * 0.05 || 1, yPad = (yMax - yMin) * 0.08 || 1;
+  const x0 = xMin - xPad, x1 = xMax + xPad, y0 = yMin - yPad, y1 = yMax + yPad;
+  const innerW = W - padL - padR, innerH = H - padT - padB;
+  const X = v => padL + (v - x0) / (x1 - x0) * innerW;
+  const Y = v => padT + innerH - (v - y0) / (y1 - y0) * innerH;
+
+  const svg = _svg(container, W, H);
+
+  // gridlines + tick labels
+  for (let i = 0; i <= 4; i++) {
+    const xv = x0 + (x1 - x0) * i / 4;
+    const xx = X(xv);
+    const vline = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    vline.setAttribute('x1', xx); vline.setAttribute('y1', padT);
+    vline.setAttribute('x2', xx); vline.setAttribute('y2', padT + innerH);
+    vline.setAttribute('stroke', '#f3f4f6');
+    svg.appendChild(vline);
+    _axis(svg, xx, padT + innerH + 16, valueFmt(xv));
+
+    const yv = y0 + (y1 - y0) * i / 4;
+    const yy = Y(yv);
+    const hline = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    hline.setAttribute('x1', padL); hline.setAttribute('y1', yy);
+    hline.setAttribute('x2', W - padR); hline.setAttribute('y2', yy);
+    hline.setAttribute('stroke', '#eef0f3');
+    svg.appendChild(hline);
+    _axis(svg, padL - 6, yy + 3, valueFmt(yv), { anchor: 'end' });
+  }
+
+  // front polyline
+  if (pts.length > 1) {
+    let d = '';
+    pts.forEach((p, i) => { d += (i ? 'L' : 'M') + X(p.x) + ' ' + Y(p.y) + ' '; });
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', d);
+    path.setAttribute('fill', 'none');
+    path.setAttribute('stroke', color);
+    path.setAttribute('stroke-opacity', 0.45);
+    path.setAttribute('stroke-width', 1.5);
+    svg.appendChild(path);
+  }
+
+  pts.forEach(p => {
+    const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    c.setAttribute('cx', X(p.x)); c.setAttribute('cy', Y(p.y));
+    const selected = selectedId != null && p.id === selectedId;
+    c.setAttribute('r', selected ? 6.5 : 4.5);
+    c.setAttribute('fill', selected ? '#dc2626' : color);
+    c.setAttribute('stroke', '#fff');
+    c.setAttribute('stroke-width', 1.2);
+    if (onSelect) c.style.cursor = 'pointer';
+    const title = document.createElementNS('http://www.w3.org/2000/svg', 'title');
+    title.textContent = p.label || `${valueFmt(p.x)}, ${valueFmt(p.y)}`;
+    c.appendChild(title);
+    if (onSelect) c.addEventListener('click', () => onSelect(p));
+    svg.appendChild(c);
+  });
+
+  // axis captions
+  _axis(svg, padL + innerW / 2, H - 6, xLabel, { size: 11 });
+  const yl = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+  yl.setAttribute('x', 14); yl.setAttribute('y', padT + innerH / 2);
+  yl.setAttribute('font-size', 11); yl.setAttribute('fill', '#6b7280');
+  yl.setAttribute('text-anchor', 'middle');
+  yl.setAttribute('transform', `rotate(-90 14 ${padT + innerH / 2})`);
+  yl.textContent = yLabel;
+  svg.appendChild(yl);
+
+  if (sampled) {
+    const note = document.createElement('div');
+    note.className = 'small muted';
+    note.textContent = `前沿共 ${sorted.length} 个点，为保持流畅已均匀抽样显示 ${pts.length} 个（表格中可查看全部）。`;
+    container.appendChild(note);
+  }
+  return svg;
+}

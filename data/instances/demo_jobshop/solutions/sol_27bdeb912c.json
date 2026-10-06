@@ -1,0 +1,98 @@
+{
+  "id": "sol_27bdeb912c",
+  "problem_id": "demo_jobshop",
+  "solver": "genetic",
+  "status": "feasible",
+  "objective_value": 12.0,
+  "makespan": 12,
+  "assignments": [
+    {
+      "task": "J1A",
+      "start": 0,
+      "end": 4,
+      "resources": [
+        "M1"
+      ]
+    },
+    {
+      "task": "J2A",
+      "start": 0,
+      "end": 5,
+      "resources": [
+        "M2"
+      ]
+    },
+    {
+      "task": "J3A",
+      "start": 4,
+      "end": 7,
+      "resources": [
+        "M1"
+      ]
+    },
+    {
+      "task": "J1B",
+      "start": 5,
+      "end": 8,
+      "resources": [
+        "M2"
+      ]
+    },
+    {
+      "task": "J2B",
+      "start": 7,
+      "end": 9,
+      "resources": [
+        "M1"
+      ]
+    },
+    {
+      "task": "J3B",
+      "start": 8,
+      "end": 12,
+      "resources": [
+        "M2"
+      ]
+    }
+  ],
+  "metrics": {
+    "makespan": 12,
+    "total_completion": 45,
+    "mean_completion": 7.5,
+    "weighted_completion": 45.0,
+    "total_tardiness": 0,
+    "resource_cost": 141.0,
+    "overtime_cost": 178.0,
+    "soft_penalty": 0.0,
+    "utilisation": {
+      "M1": 0.75,
+      "M2": 1.0
+    },
+    "n_violations": 0,
+    "generations": 60,
+    "population_size": 60,
+    "fitness": 12.0,
+    "feasible": true
+  },
+  "params": {
+    "population_size": 60,
+    "generations": 60,
+    "mutation_rate": 0.15,
+    "crossover_rate": 0.8,
+    "elitism": 4,
+    "seed": 42,
+    "time_limit": 30
+  },
+  "solve_time": 0.5258,
+  "message": "60 generations, pop 60",
+  "lower_bound": null,
+  "objectives": [
+    "makespan"
+  ],
+  "objective_values": {
+    "makespan": 12.0
+  },
+  "run_id": "",
+  "created_at": "2026-10-06T08:16:25",
+  "version": 1
+}

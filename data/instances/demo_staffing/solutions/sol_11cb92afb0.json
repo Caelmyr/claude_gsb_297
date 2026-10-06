@@ -1,0 +1,122 @@
+{
+  "id": "sol_11cb92afb0",
+  "problem_id": "demo_staffing",
+  "solver": "nsga2",
+  "status": "feasible",
+  "objective_value": 257.0,
+  "makespan": 34,
+  "assignments": [
+    {
+      "task": "A3",
+      "start": 0,
+      "end": 6,
+      "resources": [
+        "P3",
+        "R1",
+        "T1"
+      ]
+    },
+    {
+      "task": "A1",
+      "start": 1,
+      "end": 7,
+      "resources": [
+        "P1",
+        "R1",
+        "T1"
+      ]
+    },
+    {
+      "task": "A2",
+      "start": 6,
+      "end": 12,
+      "resources": [
+        "P2",
+        "R1",
+        "T1"
+      ]
+    },
+    {
+      "task": "B2",
+      "start": 14,
+      "end": 22,
+      "resources": [
+        "P2",
+        "T1"
+      ]
+    },
+    {
+      "task": "B1",
+      "start": 23,
+      "end": 31,
+      "resources": [
+        "P1",
+        "T1"
+      ]
+    },
+    {
+      "task": "B3",
+      "start": 24,
+      "end": 32,
+      "resources": [
+        "P3",
+        "T1"
+      ]
+    },
+    {
+      "task": "C1",
+      "start": 31,
+      "end": 34,
+      "resources": [
+        "P2"
+      ]
+    }
+  ],
+  "metrics": {
+    "makespan": 34,
+    "total_completion": 144,
+    "mean_completion": 20.571,
+    "weighted_completion": 237,
+    "total_tardiness": 27,
+    "resource_cost": 528.0,
+    "overtime_cost": 608.0,
+    "soft_penalty": 20.0,
+    "utilisation": {
+      "P1": 0.4118,
+      "P2": 0.5,
+      "P3": 0.4118,
+      "R1": 0.2647,
+      "T1": 0.4118
+    },
+    "n_violations": 0,
+    "generations": 120,
+    "population_size": 80,
+    "front_size": 18,
+    "front_size_raw": 18,
+    "feasible": true
+  },
+  "params": {
+    "population_size": 80,
+    "generations": 120,
+    "mutation_rate": 0.15,
+    "crossover_rate": 0.8,
+    "seed": 42,
+    "time_limit": 30.0,
+    "max_front": 50,
+    "max_delay": 24
+  },
+  "solve_time": 17.5459,
+  "message": "NSGA-II：120 代 × 种群 80，前沿 18 个方案",
+  "lower_bound": null,
+  "objectives": [
+    "makespan",
+    "overtime_cost"
+  ],
+  "objective_values": {
+    "makespan": 34.0,
+    "overtime_cost": 608.0
+  },
+  "run_id": "run_efde8dc279",
+  "created_at": "2026-10-06T08:16:51",
+  "version": 1
+}

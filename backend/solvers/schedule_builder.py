@@ -72,8 +72,13 @@ def _resource_usage_at(task: models.Task, resource_id: str) -> float:
 
 
 def _feasible_start(problem: models.Problem, task_id: str,
-                    starts: Dict[str, int]) -> Optional[int]:
+                    starts: Dict[str, int],
+                    not_before: Optional[int] = None) -> Optional[int]:
     """Earliest feasible start time for ``task_id`` given already-placed tasks.
+
+    ``not_before`` additionally pushes the search window forward (used by the
+    multi-objective decoder, where deliberately waiting — e.g. for the next
+    regular-hours window — can be beneficial).
 
     Returns None if no start time within the horizon exists (e.g. an
     availability window makes the task unschedulable)."""
@@ -83,6 +88,8 @@ def _feasible_start(problem: models.Problem, task_id: str,
 
     # earliest bound: release time + precedence completion
     earliest = task.release_time
+    if not_before:
+        earliest = max(earliest, not_before)
     for dep in task.dependencies:
         if dep in starts:
             earliest = max(earliest, starts[dep] + problem.task_map()[dep].duration)
@@ -222,6 +229,34 @@ def decode(problem: models.Problem,
         if s is None:
             continue
         starts[task_id] = s
+    return starts
+
+
+def decode_with_delays(problem: models.Problem,
+                       priorities: Optional[Dict[str, float]],
+                       delays: Dict[str, float],
+                       max_delay: int) -> Dict[str, int]:
+    """Like :func:`decode`, but each task may be postponed by up to
+    ``max_delay`` slots beyond its earliest feasible start.
+
+    The plain decoder always schedules as early as possible, which can never
+    express "wait for the next regular-hours window to avoid overtime".  The
+    multi-objective search uses this variant so that time/cost trade-offs are
+    actually reachable; ``delays`` maps a task id to a fraction of
+    ``max_delay``.
+    """
+    order = topological_order(problem, priorities)
+    starts: Dict[str, int] = {}
+    for task_id in order:
+        s = _feasible_start(problem, task_id, starts)
+        if s is None:
+            continue
+        shift = int(round(delays.get(task_id, 0.0) * max_delay))
+        if shift <= 0:
+            starts[task_id] = s
+            continue
+        later = _feasible_start(problem, task_id, starts, not_before=s + shift)
+        starts[task_id] = later if later is not None else s
     return starts
 
 

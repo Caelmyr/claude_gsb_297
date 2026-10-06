@@ -34,11 +34,7 @@
     <div class="card" id="result-card" style="display:none">
       <h2>对比结果</h2>
       <div class="chart-wrap" id="bar-chart"></div>
-      <table class="mt"><thead><tr>
-        <th>求解器</th><th>状态</th><th class="num">目标值</th><th class="num">与最优差距</th>
-        <th class="num">完工时间</th><th class="num">拖期</th><th class="num">成本</th>
-        <th class="num">耗时(s)</th><th class="num">下界</th><th></th>
-      </tr></thead><tbody id="rows"></tbody></table>
+      <table class="mt"><thead><tr id="cmp-head"></tr></thead><tbody id="rows"></tbody></table>
     </div>
 
     <div class="card">
@@ -71,7 +67,8 @@ function renderChecks() {
   el.innerHTML = solutions.map((s, i) => `
     <label style="margin:0 16px 8px 0;font-size:13px;color:var(--ink)">
       <input type="checkbox" value="${s.id}" style="width:auto;margin-right:5px">
-      ${escapeHtml(solverLabel(s.solver))} <span class="muted">(${fmt(s.objective_value)})</span>
+      ${escapeHtml(solverLabel(s.solver))}${isMultiObjective(s) ? ' <span class="badge info">多目标</span>' : ''}
+      <span class="muted">(${fmt(s.objective_value)})</span>
     </label>`).join('') || '<span class="muted">暂无求解结果。</span>';
 }
 
@@ -86,7 +83,7 @@ function toggleAll(on) {
 async function compare() {
   const ids = selected();
   if (!ids.length) return toast('请至少选择一个方案', 'error');
-  const { solutions: rows } = await api(`/problems/${problem.id}/compare`, {
+  const { solutions: rows, objectives: objNames } = await api(`/problems/${problem.id}/compare`, {
     method: 'POST', body: JSON.stringify({ solution_ids: ids }),
   });
   document.getElementById('result-card').style.display = 'block';
@@ -95,11 +92,20 @@ async function compare() {
     values: rows.map(s => s.objective_value ?? 0),
     color: '#59a14f',
   });
+  // one column per optimised objective seen across the selected solutions
+  const objs = objNames || [];
+  document.getElementById('cmp-head').innerHTML =
+    '<th>求解器</th><th>优化目标</th><th>状态</th><th class="num">目标值</th>' +
+    objs.map(n => `<th class="num">${escapeHtml(objectiveLabel(n))}</th>`).join('') +
+    '<th class="num">与最优差距</th><th class="num">完工时间</th><th class="num">拖期</th>' +
+    '<th class="num">成本</th><th class="num">耗时(s)</th><th class="num">下界</th><th></th>';
   document.getElementById('rows').innerHTML = rows.map(s => `
     <tr ${s.is_best ? 'style="background:#f0fdf4"' : ''}>
       <td>${escapeHtml(solverLabel(s.solver))} ${s.is_best ? '<span class="badge ok">最优</span>' : ''}</td>
+      <td>${objectiveCell(s)}</td>
       <td>${statusBadge(s.status)}</td>
       <td class="num"><b>${fmt(s.objective_value)}</b></td>
+      ${objs.map(n => `<td class="num">${fmt((s.objective_values || {})[n])}</td>`).join('')}
       <td class="num">${s.delta_vs_best == null ? '—' : (s.delta_vs_best > 0 ? '+' : '') + fmt(s.delta_vs_best)}</td>
       <td class="num">${fmt(s.makespan)}</td>
       <td class="num">${fmt(s.metrics?.total_tardiness)}</td>

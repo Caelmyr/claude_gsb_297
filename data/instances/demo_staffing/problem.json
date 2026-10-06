@@ -14,7 +14,22 @@
         "护理"
       ],
       "cost_per_unit": 12.0,
-      "availability": null
+      "availability": null,
+      "regular_hours": [
+        [
+          0,
+          8
+        ],
+        [
+          24,
+          32
+        ],
+        [
+          48,
+          56
+        ]
+      ],
+      "overtime_multiplier": 1.5
     },
     {
       "id": "P2",
@@ -26,7 +41,22 @@
         "转运"
       ],
       "cost_per_unit": 10.0,
-      "availability": null
+      "availability": null,
+      "regular_hours": [
+        [
+          0,
+          8
+        ],
+        [
+          24,
+          32
+        ],
+        [
+          48,
+          56
+        ]
+      ],
+      "overtime_multiplier": 1.5
     },
     {
       "id": "P3",
@@ -37,7 +67,22 @@
         "护理"
       ],
       "cost_per_unit": 11.0,
-      "availability": null
+      "availability": null,
+      "regular_hours": [
+        [
+          0,
+          8
+        ],
+        [
+          24,
+          32
+        ],
+        [
+          48,
+          56
+        ]
+      ],
+      "overtime_multiplier": 1.5
     },
     {
       "id": "R1",
@@ -46,7 +91,22 @@
       "capacity": 2,
       "skills": [],
       "cost_per_unit": 2.0,
-      "availability": null
+      "availability": null,
+      "regular_hours": [
+        [
+          0,
+          8
+        ],
+        [
+          24,
+          32
+        ],
+        [
+          48,
+          56
+        ]
+      ],
+      "overtime_multiplier": 1.5
     },
     {
       "id": "T1",
@@ -60,7 +120,9 @@
           0,
           60
         ]
-      ]
+      ],
+      "regular_hours": null,
+      "overtime_multiplier": 1.5
     }
   ],
   "tasks": [
@@ -219,7 +281,7 @@
     "minimize": true,
     "params": {}
   },
-  "version": 1,
-  "created_at": "2026-10-05T14:04:06",
-  "updated_at": "2026-10-05T14:04:06"
+  "version": 2,
+  "created_at": "2026-10-06T07:52:24",
+  "updated_at": "2026-10-06T07:52:24"
 }

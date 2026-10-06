@@ -1,0 +1,642 @@
+{
+  "id": "sol_8afffc4401",
+  "problem_id": "demo_large",
+  "solver": "greedy",
+  "status": "feasible",
+  "objective_value": 78.0,
+  "makespan": 78,
+  "assignments": [
+    {
+      "task": "J12O0",
+      "start": 0,
+      "end": 1,
+      "resources": [
+        "M1"
+      ]
+    },
+    {
+      "task": "J18O0",
+      "start": 0,
+      "end": 1,
+      "resources": [
+        "M3"
+      ]
+    },
+    {
+      "task": "J12O1",
+      "start": 1,
+      "end": 3,
+      "resources": [
+        "M2"
+      ]
+    },
+    {
+      "task": "J18O1",
+      "start": 1,
+      "end": 3,
+      "resources": [
+        "M4"
+      ]
+    },
+    {
+      "task": "J24O0",
+      "start": 1,
+      "end": 2,
+      "resources": [
+        "M1"
+      ]
+    },
+    {
+      "task": "J6O0",
+      "start": 1,
+      "end": 2,
+      "resources": [
+        "M3"
+      ]
+    },
+    {
+      "task": "J14O0",
+      "start": 2,
+      "end": 5,
+      "resources": [
+        "M3"
+      ]
+    },
+    {
+      "task": "J20O0",
+      "start": 2,
+      "end": 5,
+      "resources": [
+        "M1"
+      ]
+    },
+    {
+      "task": "J13O0",
+      "start": 3,
+      "end": 5,
+      "resources": [
+        "M2"
+      ]
+    },
+    {
+      "task": "J19O0",
+      "start": 3,
+      "end": 5,
+      "resources": [
+        "M4"
+      ]
+    },
+    {
+      "task": "J13O1",
+      "start": 5,
+      "end": 8,
+      "resources": [
+        "M3"
+      ]
+    },
+    {
+      "task": "J19O1",
+      "start": 5,
+      "end": 8,
+      "resources": [
+        "M1"
+      ]
+    },
+    {
+      "task": "J1O0",
+      "start": 5,
+      "end": 7,
+      "resources": [
+        "M2"
+      ]
+    },
+    {
+      "task": "J6O1",
+      "start": 5,
+      "end": 7,
+      "resources": [
+        "M4"
+      ]
+    },
+    {
+      "task": "J24O1",
+      "start": 7,
+      "end": 9,
+      "resources": [
+        "M2"
+      ]
+    },
+    {
+      "task": "J7O0",
+      "start": 7,
+      "end": 9,
+      "resources": [
+        "M4"
+      ]
+    },
+    {
+      "task": "J1O1",
+      "start": 8,
+      "end": 11,
+      "resources": [
+        "M3"
+      ]
+    },
+    {
+      "task": "J14O1",
+      "start": 9,
+      "end": 13,
+      "resources": [
+        "M4"
+      ]
+    },
+    {
+      "task": "J25O0",
+      "start": 9,
+      "end": 11,
+      "resources": [
+        "M2"
+      ]
+    },
+    {
+      "task": "J7O1",
+      "start": 9,
+      "end": 12,
+      "resources": [
+        "M1"
+      ]
+    },
+    {
+      "task": "J20O1",
+      "start": 11,
+      "end": 15,
+      "resources": [
+        "M2"
+      ]
+    },
+    {
+      "task": "J25O1",
+      "start": 11,
+      "end": 14,
+      "resources": [
+        "M3"
+      ]
+    },
+    {
+      "task": "J8O0",
+      "start": 12,
+      "end": 15,
+      "resources": [
+        "M1"
+      ]
+    },
+    {
+      "task": "J15O0",
+      "start": 13,
+      "end": 17,
+      "resources": [
+        "M4"
+      ]
+    },
+    {
+      "task": "J2O0",
+      "start": 14,
+      "end": 17,
+      "resources": [
+        "M3"
+      ]
+    },
+    {
+      "task": "J21O0",
+      "start": 15,
+      "end": 19,
+      "resources": [
+        "M2"
+      ]
+    },
+    {
+      "task": "J10O0",
+      "start": 17,
+      "end": 22,
+      "resources": [
+        "M3"
+      ]
+    },
+    {
+      "task": "J15O1",
+      "start": 17,
+      "end": 22,
+      "resources": [
+        "M1"
+      ]
+    },
+    {
+      "task": "J2O1",
+      "start": 17,
+      "end": 21,
+      "resources": [
+        "M4"
+      ]
+    },
+    {
+      "task": "J8O1",
+      "start": 19,
+      "end": 23,
+      "resources": [
+        "M2"
+      ]
+    },
+    {
+      "task": "J3O0",
+      "start": 21,
+      "end": 25,
+      "resources": [
+        "M4"
+      ]
+    },
+    {
+      "task": "J16O0",
+      "start": 22,
+      "end": 27,
+      "resources": [
+        "M1"
+      ]
+    },
+    {
+      "task": "J21O1",
+      "start": 22,
+      "end": 27,
+      "resources": [
+        "M3"
+      ]
+    },
+    {
+      "task": "J9O0",
+      "start": 23,
+      "end": 27,
+      "resources": [
+        "M2"
+      ]
+    },
+    {
+      "task": "J10O1",
+      "start": 25,
+      "end": 31,
+      "resources": [
+        "M4"
+      ]
+    },
+    {
+      "task": "J16O1",
+      "start": 27,
+      "end": 33,
+      "resources": [
+        "M2"
+      ]
+    },
+    {
+      "task": "J22O0",
+      "start": 27,
+      "end": 32,
+      "resources": [
+        "M3"
+      ]
+    },
+    {
+      "task": "J3O1",
+      "start": 27,
+      "end": 32,
+      "resources": [
+        "M1"
+      ]
+    },
+    {
+      "task": "J11O0",
+      "start": 31,
+      "end": 37,
+      "resources": [
+        "M4"
+      ]
+    },
+    {
+      "task": "J4O0",
+      "start": 32,
+      "end": 37,
+      "resources": [
+        "M1"
+      ]
+    },
+    {
+      "task": "J9O1",
+      "start": 32,
+      "end": 37,
+      "resources": [
+        "M3"
+      ]
+    },
+    {
+      "task": "J17O0",
+      "start": 33,
+      "end": 39,
+      "resources": [
+        "M2"
+      ]
+    },
+    {
+      "task": "J11O1",
+      "start": 37,
+      "end": 38,
+      "resources": [
+        "M1"
+      ]
+    },
+    {
+      "task": "J16O2",
+      "start": 37,
+      "end": 38,
+      "resources": [
+        "M3"
+      ]
+    },
+    {
+      "task": "J22O1",
+      "start": 37,
+      "end": 43,
+      "resources": [
+        "M4"
+      ]
+    },
+    {
+      "task": "J10O2",
+      "start": 38,
+      "end": 39,
+      "resources": [
+        "M1"
+      ]
+    },
+    {
+      "task": "J17O1",
+      "start": 39,
+      "end": 40,
+      "resources": [
+        "M3"
+      ]
+    },
+    {
+      "task": "J18O2",
+      "start": 39,
+      "end": 42,
+      "resources": [
+        "M1"
+      ]
+    },
+    {
+      "task": "J4O1",
+      "start": 39,
+      "end": 45,
+      "resources": [
+        "M2"
+      ]
+    },
+    {
+      "task": "J12O2",
+      "start": 40,
+      "end": 43,
+      "resources": [
+        "M3"
+      ]
+    },
+    {
+      "task": "J22O2",
+      "start": 43,
+      "end": 44,
+      "resources": [
+        "M1"
+      ]
+    },
+    {
+      "task": "J23O0",
+      "start": 43,
+      "end": 49,
+      "resources": [
+        "M4"
+      ]
+    },
+    {
+      "task": "J6O2",
+      "start": 44,
+      "end": 47,
+      "resources": [
+        "M1"
+      ]
+    },
+    {
+      "task": "J4O2",
+      "start": 45,
+      "end": 46,
+      "resources": [
+        "M3"
+      ]
+    },
+    {
+      "task": "J5O0",
+      "start": 45,
+      "end": 51,
+      "resources": [
+        "M2"
+      ]
+    },
+    {
+      "task": "J24O2",
+      "start": 46,
+      "end": 49,
+      "resources": [
+        "M3"
+      ]
+    },
+    {
+      "task": "J17O2",
+      "start": 49,
+      "end": 51,
+      "resources": [
+        "M4"
+      ]
+    },
+    {
+      "task": "J23O1",
+      "start": 49,
+      "end": 50,
+      "resources": [
+        "M1"
+      ]
+    },
+    {
+      "task": "J14O2",
+      "start": 50,
+      "end": 55,
+      "resources": [
+        "M1"
+      ]
+    },
+    {
+      "task": "J11O2",
+      "start": 51,
+      "end": 53,
+      "resources": [
+        "M2"
+      ]
+    },
+    {
+      "task": "J5O1",
+      "start": 51,
+      "end": 52,
+      "resources": [
+        "M3"
+      ]
+    },
+    {
+      "task": "J20O2",
+      "start": 52,
+      "end": 57,
+      "resources": [
+        "M3"
+      ]
+    },
+    {
+      "task": "J5O2",
+      "start": 52,
+      "end": 54,
+      "resources": [
+        "M4"
+      ]
+    },
+    {
+      "task": "J23O2",
+      "start": 53,
+      "end": 55,
+      "resources": [
+        "M2"
+      ]
+    },
+    {
+      "task": "J13O2",
+      "start": 54,
+      "end": 58,
+      "resources": [
+        "M4"
+      ]
+    },
+    {
+      "task": "J19O2",
+      "start": 55,
+      "end": 59,
+      "resources": [
+        "M2"
+      ]
+    },
+    {
+      "task": "J2O2",
+      "start": 55,
+      "end": 60,
+      "resources": [
+        "M1"
+      ]
+    },
+    {
+      "task": "J8O2",
+      "start": 57,
+      "end": 62,
+      "resources": [
+        "M3"
+      ]
+    },
+    {
+      "task": "J1O2",
+      "start": 58,
+      "end": 62,
+      "resources": [
+        "M4"
+      ]
+    },
+    {
+      "task": "J7O2",
+      "start": 59,
+      "end": 63,
+      "resources": [
+        "M2"
+      ]
+    },
+    {
+      "task": "J25O2",
+      "start": 62,
+      "end": 66,
+      "resources": [
+        "M4"
+      ]
+    },
+    {
+      "task": "J15O2",
+      "start": 63,
+      "end": 69,
+      "resources": [
+        "M2"
+      ]
+    },
+    {
+      "task": "J21O2",
+      "start": 66,
+      "end": 72,
+      "resources": [
+        "M4"
+      ]
+    },
+    {
+      "task": "J3O2",
+      "start": 69,
+      "end": 75,
+      "resources": [
+        "M2"
+      ]
+    },
+    {
+      "task": "J9O2",
+      "start": 72,
+      "end": 78,
+      "resources": [
+        "M4"
+      ]
+    }
+  ],
+  "metrics": {
+    "makespan": 78,
+    "total_completion": 2461,
+    "mean_completion": 32.813,
+    "weighted_completion": 5130,
+    "total_tardiness": 2074,
+    "resource_cost": 677.0,
+    "overtime_cost": 889.0,
+    "soft_penalty": 0.0,
+    "utilisation": {
+      "M1": 0.6923,
+      "M2": 0.9487,
+      "M3": 0.7308,
+      "M4": 0.9744
+    },
+    "n_violations": 0,
+    "feasible": true,
+    "rule": "priority-then-slack"
+  },
+  "params": {},
+  "solve_time": 0.2885,
+  "message": "serial SGS with priority rule",
+  "lower_bound": null,
+  "objectives": [
+    "makespan"
+  ],
+  "objective_values": {
+    "makespan": 78.0
+  },
+  "run_id": "",
+  "created_at": "2026-10-06T08:16:52",
+  "version": 1
+}

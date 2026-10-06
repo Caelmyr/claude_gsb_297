@@ -15,10 +15,13 @@ def _jobshop() -> models.Problem:
         horizon=40,
         time_unit="小时",
         resources=[
+            # 正常工时之外（夜间）开机按 2 倍费率计加班成本
             models.Resource(id="M1", name="机器 A", type="equipment", capacity=1,
-                            cost_per_unit=5.0),
+                            cost_per_unit=5.0,
+                            regular_hours=[[0, 8], [24, 32]], overtime_multiplier=2.0),
             models.Resource(id="M2", name="机器 B", type="equipment", capacity=1,
-                            cost_per_unit=8.0),
+                            cost_per_unit=8.0,
+                            regular_hours=[[0, 8], [24, 32]], overtime_multiplier=2.0),
         ],
         tasks=[
             models.Task(id="J1A", name="作业1 工序A", duration=4,
@@ -47,14 +50,23 @@ def _staffing() -> models.Problem:
         horizon=60,
         time_unit="小时",
         resources=[
+            # 护士与检查室：8 小时正常班，班外工作按 1.5 倍计加班费
             models.Resource(id="P1", name="护士甲", type="personnel", capacity=1,
-                            skills=["护理"], cost_per_unit=12.0),
+                            skills=["护理"], cost_per_unit=12.0,
+                            regular_hours=[[0, 8], [24, 32], [48, 56]],
+                            overtime_multiplier=1.5),
             models.Resource(id="P2", name="护士乙", type="personnel", capacity=1,
-                            skills=["护理", "转运"], cost_per_unit=10.0),
+                            skills=["护理", "转运"], cost_per_unit=10.0,
+                            regular_hours=[[0, 8], [24, 32], [48, 56]],
+                            overtime_multiplier=1.5),
             models.Resource(id="P3", name="护士丙", type="personnel", capacity=1,
-                            skills=["护理"], cost_per_unit=11.0),
+                            skills=["护理"], cost_per_unit=11.0,
+                            regular_hours=[[0, 8], [24, 32], [48, 56]],
+                            overtime_multiplier=1.5),
             models.Resource(id="R1", name="检查室", type="equipment", capacity=2,
-                            cost_per_unit=2.0),
+                            cost_per_unit=2.0,
+                            regular_hours=[[0, 8], [24, 32], [48, 56]],
+                            overtime_multiplier=1.5),
             models.Resource(id="T1", name="日班", type="time", capacity=3,
                             availability=[[0, 60]]),
         ],
@@ -101,9 +113,11 @@ def _staffing() -> models.Problem:
 
 def _large() -> models.Problem:
     """A larger instance meant to showcase GA/SA on the big end."""
+    day_shifts = [[d * 24, d * 24 + 8] for d in range(9)]  # 8h 正常班 × 9 天
     resources = [
         models.Resource(id=f"M{i}", name=f"机器 {i}", type="equipment",
-                        capacity=1, cost_per_unit=float(i))
+                        capacity=1, cost_per_unit=float(i),
+                        regular_hours=day_shifts, overtime_multiplier=1.5)
         for i in range(1, 5)
     ]
     tasks: List[models.Task] = []

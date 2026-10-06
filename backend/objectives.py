@@ -56,6 +56,32 @@ def resource_cost(problem: models.Problem, starts: Dict[str, int]) -> float:
     return cost
 
 
+def overtime_cost(problem: models.Problem, starts: Dict[str, int]) -> float:
+    """Resource cost where slots outside a resource's ``regular_hours`` are
+    charged at ``overtime_multiplier`` times the base rate.
+
+    Unlike :func:`resource_cost` (which is schedule-independent) this *does*
+    depend on the start times, which is what creates the genuine trade-off
+    against makespan: compressing the schedule pushes work into overtime
+    slots; waiting for regular hours stretches the makespan.
+    """
+    rmap = problem.resource_map()
+    tmap = problem.task_map()
+    cost = 0.0
+    for t, s in starts.items():
+        task = tmap[t]
+        for r, amount in task.resource_requirements.items():
+            res = rmap.get(r)
+            if res is None or not amount or not res.cost_per_unit:
+                continue
+            for slot in range(s, s + task.duration):
+                rate = res.cost_per_unit
+                if not res.is_regular_at(slot):
+                    rate *= res.overtime_multiplier
+                cost += amount * rate
+    return cost
+
+
 # Primitive objective evaluators -------------------------------------------------- #
 
 _PRIMITIVES = {
@@ -64,7 +90,14 @@ _PRIMITIVES = {
     "weighted_completion": weighted_completion,
     "tardiness": total_tardiness,
     "cost": resource_cost,
+    "overtime_cost": overtime_cost,
 }
+
+
+def primitive_names() -> List[str]:
+    """Names of every objective primitive usable in single- or
+    multi-objective optimisation."""
+    return sorted(_PRIMITIVES)
 
 
 def evaluate_primitive(name: str, problem: models.Problem,
@@ -72,6 +105,18 @@ def evaluate_primitive(name: str, problem: models.Problem,
     if name not in _PRIMITIVES:
         raise ValueError(f"unknown primitive objective: {name}")
     return float(_PRIMITIVES[name](problem, starts))
+
+
+def evaluate_objectives(problem: models.Problem, starts: Dict[str, int],
+                        names: List[str]) -> Dict[str, float]:
+    """Canonical per-objective values for a schedule.
+
+    This is the *only* place multi-objective values are computed; the results
+    are stored on the Solution and every page displays the stored numbers, so
+    all views agree by construction.
+    """
+    return {name: round(evaluate_primitive(name, problem, starts), 4)
+            for name in names}
 
 
 def evaluate_objective(problem: models.Problem,
@@ -286,6 +331,7 @@ def compute_metrics(problem: models.Problem,
         "weighted_completion": round(weighted_completion(problem, starts), 3),
         "total_tardiness": round(total_tardiness(problem, starts), 3),
         "resource_cost": round(resource_cost(problem, starts), 3),
+        "overtime_cost": round(overtime_cost(problem, starts), 3),
         "soft_penalty": round(soft_penalty(problem, starts), 3),
         "utilisation": utilisation,
         "n_violations": len(hard_violations(problem, starts)),

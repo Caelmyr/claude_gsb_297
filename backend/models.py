@@ -32,6 +32,7 @@ OBJECTIVE_TYPES = (
     "weighted_completion",      # min sum weight_i * C_i
     "tardiness",                # min sum weight_i * max(0, C_i - due_i)
     "cost",                     # min resource usage cost
+    "overtime_cost",            # min resource cost with overtime premium
     "custom",                   # weighted combination of the primitives
 )
 
@@ -82,6 +83,12 @@ class Resource:
     is used by the ``resource_assignment`` constraint so a task can require a
     person or machine that possesses a particular capability rather than one
     specific instance.
+
+    ``regular_hours`` marks the *normal working time* intervals; work scheduled
+    outside them is overtime and is charged at ``overtime_multiplier`` times
+    the base rate by the ``overtime_cost`` objective.  ``None`` means every
+    slot is regular time (no overtime ever), which keeps the historical
+    behaviour for instances created before overtime modelling existed.
     """
     id: str
     name: str = ""
@@ -90,17 +97,27 @@ class Resource:
     skills: List[str] = field(default_factory=list)
     cost_per_unit: float = 0.0              # cost per unit-time of use
     availability: Optional[List[List[int]]] = None   # [[start, end), ...]
+    regular_hours: Optional[List[List[int]]] = None  # [[start, end), ...]
+    overtime_multiplier: float = 1.5        # rate multiplier outside regular_hours
 
     def __post_init__(self) -> None:
         if self.type not in RESOURCE_TYPES:
             raise ValueError(f"unknown resource type: {self.type}")
         if self.capacity < 0:
             raise ValueError(f"resource {self.id}: negative capacity")
+        if self.overtime_multiplier < 1.0:
+            raise ValueError(f"resource {self.id}: overtime_multiplier must be >= 1")
 
     def available_at(self, t: int) -> bool:
         if self.availability is None:
             return True
         return any(a <= t < b for (a, b) in self.availability)
+
+    def is_regular_at(self, t: int) -> bool:
+        """True when slot ``t`` falls inside regular (non-overtime) hours."""
+        if self.regular_hours is None:
+            return True
+        return any(a <= t < b for (a, b) in self.regular_hours)
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -316,6 +333,24 @@ class Assignment:
 
 @dataclass
 class Solution:
+    """A recorded solve result.
+
+    Objective bookkeeping — the single source of truth every page reads from
+    (results / compare / report / history all display these stored values and
+    never recompute their own):
+
+    * ``objectives``       -- names of the objectives this run optimised.
+                              Single-objective solvers record the problem's
+                              declared objective (``[problem.objective.type]``);
+                              a multi-objective run records the whole list.
+    * ``objective_values`` -- pure primitive value per optimised objective
+                              (no soft-constraint penalties mixed in).
+    * ``objective_value``  -- the problem's *declared* objective including
+                              soft penalties; comparable across all solutions
+                              of a problem regardless of how they were produced.
+    * ``run_id``           -- groups the solutions produced by one
+                              multi-objective run; empty for single runs.
+    """
     id: str
     problem_id: str
     solver: str
@@ -328,6 +363,9 @@ class Solution:
     solve_time: float = 0.0
     message: str = ""
     lower_bound: Optional[float] = None
+    objectives: List[str] = field(default_factory=list)
+    objective_values: Dict[str, float] = field(default_factory=dict)
+    run_id: str = ""
     created_at: str = field(default_factory=now_iso)
     version: int = 1
 

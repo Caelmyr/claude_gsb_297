@@ -31,11 +31,17 @@ def solution_markdown(sol: models.Solution) -> str:
         f"- **耗时**: {_fmt(sol.solve_time)} s  ·  "
         f"**下界**: {_fmt(sol.lower_bound)}",
     ]
+    if sol.objective_values:
+        pairs = "  ·  ".join(f"{k}={_fmt(v)}" for k, v in sol.objective_values.items())
+        lines.append(f"- **优化目标**: {', '.join(sol.objectives)}  ·  **各目标值**: {pairs}")
+    if sol.run_id:
+        lines.append(f"- **多目标运行**: `{sol.run_id}`")
     m = sol.metrics
     if m:
         lines.append(f"- **指标**: 完工时间={_fmt(m.get('makespan'))}, "
                      f"总拖期={_fmt(m.get('total_tardiness'))}, "
                      f"资源成本={_fmt(m.get('resource_cost'))}, "
+                     f"加班成本={_fmt(m.get('overtime_cost'))}, "
                      f"违反数={_fmt(m.get('n_violations'))}")
     if sol.message:
         lines.append(f"- **说明**: {sol.message}")
@@ -50,15 +56,22 @@ def solution_markdown(sol: models.Solution) -> str:
 
 
 def comparison_markdown(solutions: List[models.Solution]) -> str:
+    # one column per optimised objective seen across the compared solutions
+    obj_names = sorted({k for s in solutions for k in (s.objective_values or {})})
+    obj_header = "".join(f" {n} |" for n in obj_names)
     lines = [
         "## 方案对比",
         "",
-        "| 求解器 | 状态 | 目标值 | 完工时间 | 耗时(s) | 下界 |",
-        "|--------|--------|-----------|----------|----------|-------------|",
+        f"| 求解器 | 状态 | 目标值 |{obj_header} 完工时间 | 耗时(s) | 下界 |",
+        "|--------|--------|-----------|" + "-----------|" * len(obj_names)
+        + "----------|----------|-------------|",
     ]
     for s in sorted(solutions, key=lambda s: (s.objective_value is None, s.objective_value or 0)):
-        lines.append(f"| {s.solver} | {s.status} | {_fmt(s.objective_value)} | "
-                     f"{_fmt(s.makespan)} | {_fmt(s.solve_time)} | {_fmt(s.lower_bound)} |")
+        obj_cells = "".join(f" {_fmt((s.objective_values or {}).get(n))} |"
+                            for n in obj_names)
+        lines.append(f"| {s.solver} | {s.status} | {_fmt(s.objective_value)} |"
+                     f"{obj_cells} {_fmt(s.makespan)} | {_fmt(s.solve_time)} | "
+                     f"{_fmt(s.lower_bound)} |")
     lines.append("")
     return "\n".join(lines)
 

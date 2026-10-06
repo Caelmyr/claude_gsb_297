@@ -61,7 +61,8 @@ async function load() {
   const r = await api(`/problems/${problem.id}/solutions`);
   document.getElementById('solution-checks').innerHTML = r.solutions.map(s => `
     <label style="margin:0 16px 8px 0;font-size:13px"><input type="checkbox" value="${s.id}" checked
-      style="width:auto;margin-right:5px">${escapeHtml(solverLabel(s.solver))}</label>`).join('')
+      style="width:auto;margin-right:5px">${escapeHtml(solverLabel(s.solver))}${isMultiObjective(s)
+        ? ` <span class="badge info">多目标</span> <span class="muted small">${escapeHtml(objectiveValuesText(s))}</span>` : ''}</label>`).join('')
     || '<span class="muted">暂无求解结果。</span>';
   const sens = await api(`/problems/${problem.id}/sensitivity`).catch(() => ({ results: [] }));
   document.getElementById('sens-select').innerHTML = '<option value="">— 无 —</option>' +

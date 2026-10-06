@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>帕累托前沿 — 排程求解系统</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">排程求解系统</div>
+    <div class="brand-sub">运筹优化与排程求解</div>
+    <nav id="nav"></nav>
+    <div class="section-label">问题实例</div>
+    <select id="problem-picker"></select>
+  </aside>
+  <main class="main">
+    <div class="page-head">
+      <h1>帕累托前沿</h1>
+      <span class="sub">同时优化多个相互冲突的目标，输出一组互不支配的方案供取舍</span>
+    </div>
+
+    <div class="card">
+      <h2>多目标求解设置</h2>
+      <div class="form-grid">
+        <div><label>目标 X（横轴）</label><select id="obj-x"></select></div>
+        <div><label>目标 Y（纵轴）</label><select id="obj-y"></select></div>
+        <div><label>种群规模</label><input id="p-pop" type="number" value="80" min="4"></div>
+        <div><label>迭代代数</label><input id="p-gen" type="number" value="120" min="1"></div>
+        <div><label>前沿方案上限（存盘数量）</label><input id="p-maxfront" type="number" value="50" min="2"></div>
+        <div><label>时间上限（秒）</label><input id="p-tlimit" type="number" value="30" min="1"></div>
+        <div><label>随机种子</label><input id="p-seed" type="number" value="42"></div>
+        <div><label>单任务最大等待（槽）</label><input id="p-maxdelay" type="number" value="24" min="0"></div>
+      </div>
+      <div class="btn-row">
+        <button class="btn primary" id="run-btn" onclick="run()">▶ 求解帕累托前沿</button>
+      </div>
+      <p class="small muted">同一批任务在「尽早完工」与「控制加班成本」之间往往不可兼得：本页用
+        NSGA-II 同时优化两个目标，找出谁也压不倒谁的一组方案（帕累托前沿）。前沿上的每个方案都会作为普通求解结果存盘，
+        可在结果、对比、报告与甘特图页中查看。「单任务最大等待」允许任务为避开加班时段而推迟开始。</p>
+    </div>
+
+    <div class="card" id="front-card" style="display:none">
+      <div class="flex">
+        <h2 style="margin:0">前沿图</h2>
+        <div class="spacer"></div>
+        <span class="badge info" id="front-meta"></span>
+      </div>
+      <div class="chart-wrap" id="front-chart"></div>
+      <p class="small muted" id="front-note"></p>
+      <div id="selected-bar" style="display:none" class="mt">
+        <div class="stat">
+          <div class="label">选中方案</div>
+          <div class="value" style="font-size:16px" id="selected-text"></div>
+          <div class="btn-row">
+            <a class="btn sm" id="selected-gantt" href="#">查看甘特图</a>
+            <a class="btn sm" id="selected-detail" href="#">结果页详情</a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" id="sols-card" style="display:none">
+      <h2>前沿方案 <span class="muted small" id="sols-count"></span></h2>
+      <table><thead><tr id="sol-head"></tr></thead><tbody id="sol-rows"></tbody></table>
+      <div class="btn-row" id="pager"></div>
+    </div>
+
+    <div class="card">
+      <h2>历史多目标运行</h2>
+      <table><thead><tr>
+        <th>运行 ID</th><th>优化目标</th><th class="num">方案数</th>
+        <th class="num">耗时(s)</th><th>时间</th><th></th>
+      </tr></thead><tbody id="run-rows"></tbody></table>
+    </div>
+  </main>
+</div>
+<script src="js/common.js"></script>
+<script src="js/charts.js"></script>
+<script>
+const PAGE_SIZE = 15;
+const OBJECTIVE_CHOICES = OBJECTIVE_TYPES.filter(t => t !== 'custom');
+let problem = null;
+let current = null;          // {run_id, objectives, solutions, solve_time}
+let selectedId = null;
+let page = 0;
+
+initSidebar('pareto.html');
+
+async function load() {
+  const id = currentProblemId();
+  if (!id) return;
+  problem = await api('/problems/' + id);
+  const opts = OBJECTIVE_CHOICES.map(t =>
+    `<option value="${t}">${escapeHtml(objectiveLabel(t))}（${t}）</option>`).join('');
+  document.getElementById('obj-x').innerHTML = opts;
+  document.getElementById('obj-y').innerHTML = opts;
+  document.getElementById('obj-x').value = 'makespan';
+  document.getElementById('obj-y').value = 'overtime_cost';
+  await loadRuns();
+}
+
+function collectParams() {
+  return {
+    population_size: Number(document.getElementById('p-pop').value) || 80,
+    generations: Number(document.getElementById('p-gen').value) || 120,
+    max_front: Number(document.getElementById('p-maxfront').value) || 50,
+    time_limit: Number(document.getElementById('p-tlimit').value) || 30,
+    seed: Number(document.getElementById('p-seed').value) || 42,
+    max_delay: Number(document.getElementById('p-maxdelay').value) || 0,
+  };
+}
+
+async function run() {
+  const ox = document.getElementById('obj-x').value;
+  const oy = document.getElementById('obj-y').value;
+  if (ox === oy) return toast('两个坐标轴请选择不同的目标', 'error');
+  const btn = document.getElementById('run-btn');
+  btn.disabled = true; btn.textContent = '求解中…';
+  try {
+    const r = await api(`/problems/${problem.id}/pareto`, {
+      method: 'POST',
+      body: JSON.stringify({ objectives: [ox, oy], params: collectParams() }),
+    });
+    toast(`求解完成：前沿 ${r.n_front} 个方案，已存盘`);
+    showFront(r);
+    await loadRuns();
+  } catch (e) {
+    toast(e.message, 'error');
+  } finally {
+    btn.disabled = false; btn.textContent = '▶ 求解帕累托前沿';
+  }
+}
+
+/* Render a front (fresh run or historical).  All numbers come straight from
+   the stored solution records — nothing is recomputed here. */
+function showFront(run) {
+  // canonical order: sorted by the objective tuple, same as the backend uses
+  const names = run.objectives || [];
+  run.solutions = (run.solutions || []).slice().sort((a, b) => {
+    const ka = names.map(n => (a.objective_values || {})[n] ?? 0);
+    const kb = names.map(n => (b.objective_values || {})[n] ?? 0);
+    for (let i = 0; i < names.length; i++) { if (ka[i] !== kb[i]) return ka[i] - kb[i]; }
+    return 0;
+  });
+  current = run;
+  selectedId = null;
+  page = 0;
+  document.getElementById('front-card').style.display = 'block';
+  document.getElementById('sols-card').style.display = 'block';
+  document.getElementById('selected-bar').style.display = 'none';
+  const [ox, oy] = run.objectives;
+  document.getElementById('front-meta').textContent =
+    `${objectiveLabel(ox)} × ${objectiveLabel(oy)} · ${run.solutions.length} 个方案` +
+    (run.run_id ? ` · ${run.run_id}` : '');
+  document.getElementById('front-note').textContent =
+    run.solutions.length <= 1
+      ? '前沿只有 1 个点：两个目标在该实例上暂不冲突。若预期存在折中，请检查资源的正常工时与加班费率设置。'
+      : '点击图中的点或下表中的行可选中方案；越靠左下，两个目标越难再同时改进。';
+  renderChart();
+  renderTable();
+}
+
+function frontPoints() {
+  const [ox, oy] = current.objectives;
+  return current.solutions.map(s => ({
+    id: s.id,
+    x: (s.objective_values || {})[ox],
+    y: (s.objective_values || {})[oy],
+    label: `${s.id}\n${ox}=${fmt((s.objective_values || {})[ox])}  ${oy}=${fmt((s.objective_values || {})[oy])}`,
+  }));
+}
+
+function renderChart() {
+  const [ox, oy] = current.objectives;
+  scatterChart(document.getElementById('front-chart'), {
+    points: frontPoints(),
+    xLabel: `${objectiveLabel(ox)}（${ox}）`,
+    yLabel: `${objectiveLabel(oy)}（${oy}）`,
+    selectedId,
+    onSelect: p => selectSolution(p.id),
+  });
+}
+
+function renderTable() {
+  const names = current.objectives;
+  document.getElementById('sol-head').innerHTML =
+    '<th>#</th>' + names.map(n => `<th class="num">${escapeHtml(objectiveLabel(n))}</th>`).join('') +
+    '<th>状态</th><th class="num">完工时间</th><th class="num">耗时(s)</th><th></th>';
+  const sols = current.solutions;
+  const pages = Math.max(1, Math.ceil(sols.length / PAGE_SIZE));
+  page = Math.min(page, pages - 1);
+  const slice = sols.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+  document.getElementById('sols-count').textContent = `共 ${sols.length} 个`;
+  document.getElementById('sol-rows').innerHTML = slice.map((s, i) => `
+    <tr style="cursor:pointer;${s.id === selectedId ? 'background:#eff6ff' : ''}" onclick="selectSolution('${s.id}')">
+      <td class="muted">${page * PAGE_SIZE + i + 1}</td>
+      ${names.map(n => `<td class="num"><b>${fmt((s.objective_values || {})[n])}</b></td>`).join('')}
+      <td>${statusBadge(s.status)}</td>
+      <td class="num">${fmt(s.makespan)}</td>
+      <td class="num">${fmt(s.solve_time)}</td>
+      <td><a class="btn sm" href="gantt.html?id=${encodeURIComponent(problem.id)}&solution=${encodeURIComponent(s.id)}"
+             onclick="event.stopPropagation()">甘特图</a></td>
+    </tr>`).join('') || '<tr><td colspan="8" class="empty">暂无方案。</td></tr>';
+  document.getElementById('pager').innerHTML = pages > 1 ? `
+    <button class="btn sm" ${page === 0 ? 'disabled' : ''} onclick="setPage(${page - 1})">‹ 上一页</button>
+    <span class="small muted" style="align-self:center">第 ${page + 1} / ${pages} 页</span>
+    <button class="btn sm" ${page >= pages - 1 ? 'disabled' : ''} onclick="setPage(${page + 1})">下一页 ›</button>` : '';
+}
+
+function setPage(p) { page = p; renderTable(); }
+
+function selectSolution(id) {
+  selectedId = id;
+  renderChart();
+  renderTable();
+  const s = current.solutions.find(x => x.id === id);
+  if (!s) return;
+  document.getElementById('selected-bar').style.display = 'block';
+  document.getElementById('selected-text').textContent = `${s.id} — ${objectiveValuesText(s)}`;
+  document.getElementById('selected-gantt').href =
+    `gantt.html?id=${encodeURIComponent(problem.id)}&solution=${encodeURIComponent(id)}`;
+  document.getElementById('selected-detail').href =
+    `results.html?id=${encodeURIComponent(problem.id)}&solution=${encodeURIComponent(id)}`;
+}
+
+async function loadRuns() {
+  const { runs } = await api(`/problems/${problem.id}/pareto`).catch(() => ({ runs: [] }));
+  document.getElementById('run-rows').innerHTML = runs.map(r => `
+    <tr>
+      <td class="mono">${escapeHtml(r.run_id)}</td>
+      <td class="small">${escapeHtml((r.objectives || []).map(objectiveLabel).join(' × '))}</td>
+      <td class="num">${r.n_solutions}</td>
+      <td class="num">${fmt(r.solutions[0] ? r.solutions[0].solve_time : null)}</td>
+      <td class="small muted">${escapeHtml(r.created_at)}</td>
+      <td><button class="btn sm" onclick='viewRun(${JSON.stringify(r.run_id)})'>查看</button></td>
+    </tr>`).join('') || '<tr><td colspan="6" class="empty">暂无多目标运行记录。</td></tr>';
+  window._runs = runs;
+}
+
+function viewRun(runId) {
+  const r = (window._runs || []).find(x => x.run_id === runId);
+  if (r) showFront(r);
+}
+
+load().catch(e => toast(e.message, 'error'));
+</script>
+</body>
+</html>

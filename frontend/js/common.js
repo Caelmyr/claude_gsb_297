@@ -5,7 +5,7 @@ const API = '/api';
 /* ---- constants (kept in sync with backend/models.py) ---------------- */
 const RESOURCE_TYPES = ['personnel', 'equipment', 'time'];
 const OBJECTIVE_TYPES = ['makespan', 'total_completion', 'weighted_completion',
-  'tardiness', 'cost', 'custom'];
+  'tardiness', 'cost', 'overtime_cost', 'custom'];
 const HARD_CONSTRAINT_TYPES = ['precedence', 'time_window', 'fixed_start',
   'resource_capacity', 'non_overlap', 'max_concurrent', 'resource_assignment'];
 const SOFT_CONSTRAINT_TYPES = ['due_date', 'preferred_window', 'min_gap',
@@ -18,6 +18,7 @@ const SOLVER_LABELS = {
   genetic: '遗传算法',
   simulated_annealing: '模拟退火',
   greedy: '贪心（优先规则）',
+  nsga2: 'NSGA-II（多目标）',
 };
 
 const OBJECTIVE_LABELS = {
@@ -26,6 +27,7 @@ const OBJECTIVE_LABELS = {
   weighted_completion: '加权完工时间',
   tardiness: '加权拖期',
   cost: '资源成本',
+  overtime_cost: '加班成本',
   custom: '自定义组合',
 };
 
@@ -130,6 +132,7 @@ const NAV = [
   ['solvers.html', '求解器与参数'],
   ['gantt.html', '甘特图'],
   ['results.html', '结果与目标值'],
+  ['pareto.html', '帕累托前沿'],
   ['sensitivity.html', '敏感性分析'],
   ['compare.html', '方案对比'],
   ['report.html', '报告生成'],
@@ -187,6 +190,29 @@ function statusBadge(status) {
   const cls = { optimal: 'ok', feasible: 'info', infeasible: 'bad',
     timeout: 'warn', error: 'bad' }[status] || 'muted';
   return `<span class="badge ${cls}">${escapeHtml(statusLabel(status))}</span>`;
+}
+
+/* ---- multi-objective display helpers (single rendering 口径 across pages) -- */
+function isMultiObjective(s) {
+  return (s.objectives || []).length > 1;
+}
+
+/* "最小完工时间=12 · 加班成本=178" — always from the stored objective_values. */
+function objectiveValuesText(s) {
+  const vals = s.objective_values || {};
+  const names = s.objectives || [];
+  return names.map(n => `${objectiveLabel(n)}=${fmt(vals[n])}`).join(' · ');
+}
+
+/* Compact cell content for the "优化目标" column of solution tables. */
+function objectiveCell(s) {
+  if (isMultiObjective(s)) {
+    return `<span class="badge info">多目标</span> <span class="small">${escapeHtml(objectiveValuesText(s))}</span>`;
+  }
+  if ((s.objectives || []).length === 1) {
+    return `<span class="small">${escapeHtml(objectiveLabel(s.objectives[0]))}</span>`;
+  }
+  return '<span class="muted">—</span>';
 }
 
 /* ---- DOM helpers ----------------------------------------------------- */

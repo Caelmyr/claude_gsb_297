@@ -1,0 +1,108 @@
+{
+  "id": "sol_9664577dbc",
+  "problem_id": "demo_staffing",
+  "solver": "greedy",
+  "status": "feasible",
+  "objective_value": 173.0,
+  "makespan": 23,
+  "assignments": [
+    {
+      "task": "A1",
+      "start": 0,
+      "end": 6,
+      "resources": [
+        "P1",
+        "R1",
+        "T1"
+      ]
+    },
+    {
+      "task": "A2",
+      "start": 0,
+      "end": 6,
+      "resources": [
+        "P2",
+        "R1",
+        "T1"
+      ]
+    },
+    {
+      "task": "A3",
+      "start": 6,
+      "end": 12,
+      "resources": [
+        "P3",
+        "R1",
+        "T1"
+      ]
+    },
+    {
+      "task": "B1",
+      "start": 6,
+      "end": 14,
+      "resources": [
+        "P1",
+        "T1"
+      ]
+    },
+    {
+      "task": "B2",
+      "start": 12,
+      "end": 20,
+      "resources": [
+        "P2",
+        "T1"
+      ]
+    },
+    {
+      "task": "B3",
+      "start": 14,
+      "end": 22,
+      "resources": [
+        "P3",
+        "T1"
+      ]
+    },
+    {
+      "task": "C1",
+      "start": 20,
+      "end": 23,
+      "resources": [
+        "P2"
+      ]
+    }
+  ],
+  "metrics": {
+    "makespan": 23,
+    "total_completion": 103,
+    "mean_completion": 14.714,
+    "weighted_completion": 173,
+    "total_tardiness": 0,
+    "resource_cost": 528.0,
+    "overtime_cost": 689.0,
+    "soft_penalty": 0.0,
+    "utilisation": {
+      "P1": 0.6087,
+      "P2": 0.7391,
+      "P3": 0.6087,
+      "R1": 0.3913,
+      "T1": 0.6087
+    },
+    "n_violations": 0,
+    "feasible": true,
+    "rule": "priority-then-slack"
+  },
+  "params": {},
+  "solve_time": 0.0011,
+  "message": "serial SGS with priority rule",
+  "lower_bound": null,
+  "objectives": [
+    "weighted_completion"
+  ],
+  "objective_values": {
+    "weighted_completion": 173.0
+  },
+  "run_id": "",
+  "created_at": "2026-10-06T08:16:34",
+  "version": 1
+}

@@ -1,0 +1,88 @@
+{
+  "id": "sol_eac86bea10",
+  "problem_id": "demo_jobshop",
+  "solver": "greedy",
+  "status": "feasible",
+  "objective_value": 14.0,
+  "makespan": 14,
+  "assignments": [
+    {
+      "task": "J2A",
+      "start": 0,
+      "end": 5,
+      "resources": [
+        "M2"
+      ]
+    },
+    {
+      "task": "J3A",
+      "start": 0,
+      "end": 3,
+      "resources": [
+        "M1"
+      ]
+    },
+    {
+      "task": "J1A",
+      "start": 3,
+      "end": 7,
+      "resources": [
+        "M1"
+      ]
+    },
+    {
+      "task": "J1B",
+      "start": 7,
+      "end": 10,
+      "resources": [
+        "M2"
+      ]
+    },
+    {
+      "task": "J2B",
+      "start": 7,
+      "end": 9,
+      "resources": [
+        "M1"
+      ]
+    },
+    {
+      "task": "J3B",
+      "start": 10,
+      "end": 14,
+      "resources": [
+        "M2"
+      ]
+    }
+  ],
+  "metrics": {
+    "makespan": 14,
+    "total_completion": 48,
+    "mean_completion": 8.0,
+    "weighted_completion": 48.0,
+    "total_tardiness": 0,
+    "resource_cost": 141.0,
+    "overtime_cost": 194.0,
+    "soft_penalty": 0.0,
+    "utilisation": {
+      "M1": 0.6429,
+      "M2": 0.8571
+    },
+    "n_violations": 0,
+    "feasible": true,
+    "rule": "priority-then-slack"
+  },
+  "params": {},
+  "solve_time": 0.0002,
+  "message": "serial SGS with priority rule",
+  "lower_bound": null,
+  "objectives": [
+    "makespan"
+  ],
+  "objective_values": {
+    "makespan": 14.0
+  },
+  "run_id": "",
+  "created_at": "2026-10-06T08:16:24",
+  "version": 1
+}

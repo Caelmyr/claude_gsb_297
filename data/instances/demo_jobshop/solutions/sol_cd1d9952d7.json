@@ -1,0 +1,102 @@
+{
+  "id": "sol_cd1d9952d7",
+  "problem_id": "demo_jobshop",
+  "solver": "nsga2",
+  "status": "feasible",
+  "objective_value": 12.0,
+  "makespan": 12,
+  "assignments": [
+    {
+      "task": "J1A",
+      "start": 0,
+      "end": 4,
+      "resources": [
+        "M1"
+      ]
+    },
+    {
+      "task": "J2A",
+      "start": 0,
+      "end": 5,
+      "resources": [
+        "M2"
+      ]
+    },
+    {
+      "task": "J1B",
+      "start": 5,
+      "end": 8,
+      "resources": [
+        "M2"
+      ]
+    },
+    {
+      "task": "J3A",
+      "start": 5,
+      "end": 8,
+      "resources": [
+        "M1"
+      ]
+    },
+    {
+      "task": "J3B",
+      "start": 8,
+      "end": 12,
+      "resources": [
+        "M2"
+      ]
+    },
+    {
+      "task": "J2B",
+      "start": 10,
+      "end": 12,
+      "resources": [
+        "M1"
+      ]
+    }
+  ],
+  "metrics": {
+    "makespan": 12,
+    "total_completion": 49,
+    "mean_completion": 8.167,
+    "weighted_completion": 49.0,
+    "total_tardiness": 0,
+    "resource_cost": 141.0,
+    "overtime_cost": 183.0,
+    "soft_penalty": 0.0,
+    "utilisation": {
+      "M1": 0.75,
+      "M2": 1.0
+    },
+    "n_violations": 0,
+    "generations": 120,
+    "population_size": 80,
+    "front_size": 5,
+    "front_size_raw": 5,
+    "feasible": true
+  },
+  "params": {
+    "population_size": 80,
+    "generations": 120,
+    "mutation_rate": 0.15,
+    "crossover_rate": 0.8,
+    "seed": 42,
+    "time_limit": 30.0,
+    "max_front": 50,
+    "max_delay": 24
+  },
+  "solve_time": 8.8768,
+  "message": "NSGA-II：120 代 × 种群 80，前沿 5 个方案",
+  "lower_bound": null,
+  "objectives": [
+    "makespan",
+    "overtime_cost"
+  ],
+  "objective_values": {
+    "makespan": 12.0,
+    "overtime_cost": 183.0
+  },
+  "run_id": "run_90f7558d02",
+  "created_at": "2026-10-06T08:16:34",
+  "version": 1
+}

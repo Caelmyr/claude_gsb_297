@@ -30,7 +30,7 @@
       <table class="mt">
         <thead><tr>
           <th>ID</th><th>名称</th><th>类型</th><th class="num">容量</th>
-          <th>技能</th><th class="num">单位成本</th><th>可用时段</th><th></th>
+          <th>技能</th><th class="num">单位成本</th><th>可用时段</th><th>正常工时（加班费率）</th><th></th>
         </tr></thead>
         <tbody id="rows"></tbody>
       </table>
@@ -47,6 +47,10 @@
         <div><label>单位时间成本</label><input id="f-cost" type="number" step="0.1" value="0"></div>
         <div><label>可用时段（如 0-40,60-80 ；留空 = 始终可用）</label>
           <input id="f-avail" placeholder="0-40, 60-80"></div>
+        <div><label>正常工时（如 0-8,24-32 ；留空 = 全部算正常工时）</label>
+          <input id="f-regular" placeholder="0-8, 24-32"></div>
+        <div><label>加班费率（正常工时之外的成本倍率）</label>
+          <input id="f-otmult" type="number" step="0.1" value="1.5" min="1"></div>
       </div>
       <div class="btn-row">
         <button class="btn primary" onclick="saveForm()">保存</button>
@@ -81,17 +85,19 @@ function render() {
       <td>${escapeHtml((r.skills || []).join(', ') || '—')}</td>
       <td class="num">${fmt(r.cost_per_unit)}</td>
       <td class="small mono">${escapeHtml(r.availability ? JSON.stringify(r.availability) : '始终可用')}</td>
+      <td class="small mono">${r.regular_hours ? escapeHtml(JSON.stringify(r.regular_hours)) + `（×${fmt(r.overtime_multiplier)}）` : '<span class="muted">无加班</span>'}</td>
       <td>
         <button class="btn sm" onclick='editResource("${escapeHtml(r.id)}")'>编辑</button>
         <button class="btn sm danger" onclick='removeResource("${escapeHtml(r.id)}")'>删除</button>
       </td>
-    </tr>`).join('') || '<tr><td colspan="8" class="empty">暂无资源。</td></tr>';
+    </tr>`).join('') || '<tr><td colspan="9" class="empty">暂无资源。</td></tr>';
 }
 
 function showForm() { editing = null; document.getElementById('form-title').textContent = '新增资源';
-  ['f-id','f-name','f-skills','f-avail'].forEach(k => document.getElementById(k).value = '');
+  ['f-id','f-name','f-skills','f-avail','f-regular'].forEach(k => document.getElementById(k).value = '');
   document.getElementById('f-type').value = 'personnel'; document.getElementById('f-capacity').value = 1;
-  document.getElementById('f-cost').value = 0; document.getElementById('f-id').disabled = false;
+  document.getElementById('f-cost').value = 0; document.getElementById('f-otmult').value = 1.5;
+  document.getElementById('f-id').disabled = false;
   document.getElementById('form-card').style.display = 'block'; }
 
 function editResource(id) {
@@ -103,6 +109,8 @@ function editResource(id) {
   document.getElementById('f-skills').value = (r.skills || []).join(', ');
   document.getElementById('f-cost').value = r.cost_per_unit;
   document.getElementById('f-avail').value = (r.availability || []).map(a => a.join('-')).join(', ');
+  document.getElementById('f-regular').value = (r.regular_hours || []).map(a => a.join('-')).join(', ');
+  document.getElementById('f-otmult').value = r.overtime_multiplier ?? 1.5;
   document.getElementById('f-id').disabled = true;
   document.getElementById('form-card').style.display = 'block';
 }
@@ -126,8 +134,11 @@ function saveForm() {
     skills: document.getElementById('f-skills').value.split(',').map(s => s.trim()).filter(Boolean),
     cost_per_unit: parseFloat(document.getElementById('f-cost').value) || 0,
     availability: parseAvailability(document.getElementById('f-avail').value),
+    regular_hours: parseAvailability(document.getElementById('f-regular').value),
+    overtime_multiplier: parseFloat(document.getElementById('f-otmult').value) || 1.5,
   };
   if (!r.id) return toast('资源 ID 不能为空', 'error');
+  if (r.overtime_multiplier < 1) return toast('加班费率不能小于 1', 'error');
   if (editing) {
     const i = problem.resources.findIndex(x => x.id === editing);
     problem.resources[i] = r;

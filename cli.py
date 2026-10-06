@@ -5,6 +5,7 @@ Examples::
     python cli.py seed --force
     python cli.py list
     python cli.py solve demo_jobshop --solver genetic --params generations=300
+    python cli.py pareto demo_jobshop --objectives makespan overtime_cost
     python cli.py sensitivity demo_jobshop --kind resource_capacity --resource M1
     python cli.py report demo_jobshop
 """
@@ -16,7 +17,7 @@ import json
 import sys
 from typing import Any, Dict, List
 
-from backend import models, report, seed, sensitivity, storage
+from backend import models, multiobjective, report, seed, sensitivity, storage
 from backend.solvers import base as solver_base
 
 
@@ -79,8 +80,33 @@ def cmd_solve(args) -> None:
 
 def cmd_solutions(args) -> None:
     for s in storage.list_solutions(args.id):
+        objs = s.get("objective_values") or {}
+        extra = ("  " + " ".join(f"{k}={v}" for k, v in objs.items())) if objs else ""
         print(f"{s['id']}  {s['solver']:20s} {s['status']:10s} "
-              f"obj={s['objective_value']} mk={s['makespan']} t={s['solve_time']}s")
+              f"obj={s['objective_value']} mk={s['makespan']} t={s['solve_time']}s{extra}")
+
+
+def cmd_pareto(args) -> None:
+    p = storage.load_problem(args.id)
+    if p is None:
+        print(f"no such problem: {args.id}")
+        sys.exit(1)
+    names = args.objectives or list(multiobjective.DEFAULT_OBJECTIVES)
+    try:
+        result = multiobjective.solve_pareto(p, names, _parse_params(args.params))
+    except ValueError as exc:
+        print(f"error: {exc}")
+        sys.exit(1)
+    for sol in result["solutions"]:
+        storage.save_solution(args.id, sol)
+    print(f"pareto run {result['run_id']}: objectives={result['objectives']} "
+          f"front={len(result['solutions'])} time={result['solve_time']}s")
+    for sol in result["solutions"]:
+        vals = "  ".join(f"{k}={v}" for k, v in sol.objective_values.items())
+        print(f"  {sol.id}  {vals}  status={sol.status} obj={sol.objective_value}")
+    if args.json:
+        print(json.dumps([s.to_dict() for s in result["solutions"]],
+                         ensure_ascii=False, indent=2))
 
 
 def cmd_sensitivity(args) -> None:
@@ -137,6 +163,14 @@ def main() -> None:
     p_sol = sub.add_parser("solutions")
     p_sol.add_argument("id")
     p_sol.set_defaults(func=cmd_solutions)
+
+    p_par = sub.add_parser("pareto")
+    p_par.add_argument("id")
+    p_par.add_argument("--objectives", nargs="*", default=[],
+                       help="objective primitives, e.g. makespan overtime_cost")
+    p_par.add_argument("--params", nargs="*", default=[])
+    p_par.add_argument("--json", action="store_true")
+    p_par.set_defaults(func=cmd_pareto)
 
     p_sens = sub.add_parser("sensitivity")
     p_sens.add_argument("id")

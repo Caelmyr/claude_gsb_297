@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Optional
 
 from flask import Flask, jsonify, request, send_from_directory
 
-from . import models, report, sensitivity, storage
+from . import models, multiobjective, report, sensitivity, storage
 from .solvers import base as solver_base
 
 FRONTEND_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
@@ -155,6 +155,61 @@ def create_app() -> Flask:
         return jsonify({"error": "not found"}), 404
 
     # ------------------------------------------------------------------ #
+    # Multi-objective (Pareto front)
+    # ------------------------------------------------------------------ #
+    @app.route("/api/problems/<problem_id>/pareto", methods=["POST"])
+    def pareto_run(problem_id: str):
+        problem = storage.load_problem(problem_id)
+        if problem is None:
+            return jsonify({"error": "not found"}), 404
+        data = request.get_json(force=True) or {}
+        try:
+            result = multiobjective.solve_pareto(
+                problem,
+                data.get("objectives") or multiobjective.DEFAULT_OBJECTIVES,
+                params=data.get("params"))
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
+        for sol in result["solutions"]:
+            storage.save_solution(problem_id, sol)
+        # Summaries come from the same listing used everywhere else, so the
+        # response matches what the results/compare/history views will show.
+        run_solutions = [s for s in storage.list_solutions(problem_id)
+                         if s.get("run_id") == result["run_id"]]
+        return jsonify({
+            "run_id": result["run_id"],
+            "objectives": result["objectives"],
+            "solve_time": result["solve_time"],
+            "timed_out": result["timed_out"],
+            "n_front": len(run_solutions),
+            "solutions": run_solutions,
+        }), 201
+
+    @app.route("/api/problems/<problem_id>/pareto", methods=["GET"])
+    def pareto_list(problem_id: str):
+        """Past multi-objective runs, grouped by run_id (newest first)."""
+        runs: Dict[str, Dict[str, Any]] = {}
+        for s in storage.list_solutions(problem_id):
+            rid = s.get("run_id")
+            if not rid:
+                continue
+            run = runs.setdefault(rid, {
+                "run_id": rid,
+                "objectives": s.get("objectives", []),
+                "created_at": s.get("created_at", ""),
+                "solutions": [],
+            })
+            run["solutions"].append(s)
+            run["created_at"] = max(run["created_at"], s.get("created_at", ""))
+        for run in runs.values():
+            names = run["objectives"]
+            run["solutions"].sort(key=lambda s: tuple(
+                (s.get("objective_values") or {}).get(n, 0.0) for n in names))
+            run["n_solutions"] = len(run["solutions"])
+        out = sorted(runs.values(), key=lambda r: r["created_at"], reverse=True)
+        return jsonify({"runs": out})
+
+    # ------------------------------------------------------------------ #
     # Analysis
     # ------------------------------------------------------------------ #
     @app.route("/api/problems/<problem_id>/sensitivity", methods=["POST"])
@@ -199,7 +254,12 @@ def create_app() -> Flask:
                                   else None),
                 "is_best": s.objective_value == best_obj,
             })
-        return jsonify({"solutions": rows, "best_objective": best_obj})
+        # union of every optimised objective across the compared solutions, so
+        # the UI can render one consistent column set for single- and
+        # multi-objective solutions alike
+        obj_names = sorted({k for s in sols for k in (s.objective_values or {})})
+        return jsonify({"solutions": rows, "best_objective": best_obj,
+                        "objectives": obj_names})
 
     @app.route("/api/problems/<problem_id>/report", methods=["POST"])
     def make_report(problem_id: str):

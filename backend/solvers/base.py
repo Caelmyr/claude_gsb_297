@@ -41,6 +41,15 @@ class Solver(ABC):
             if not message:
                 message = "; ".join(violations[:3])
 
+        # Record what the run optimised so every page shows the same numbers.
+        declared = problem.objective.type
+        objective_values: Dict[str, float] = {}
+        try:
+            objective_values[declared] = round(
+                objectives.evaluate_primitive(declared, problem, starts), 4)
+        except ValueError:
+            pass  # "custom" objective: no single primitive value
+
         return models.Solution(
             id=models.new_id("sol"),
             problem_id=problem.id,
@@ -54,6 +63,8 @@ class Solver(ABC):
             solve_time=round(solve_time, 4),
             message=message,
             lower_bound=lower_bound,
+            objectives=[declared],
+            objective_values=objective_values,
         )
 
     def run_timed(self, problem: models.Problem, params: Dict[str, Any],
