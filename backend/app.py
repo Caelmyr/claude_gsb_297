@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Optional
 
 from flask import Flask, jsonify, request, send_from_directory
 
-from . import models, report, sensitivity, storage
+from . import models, multiobjective, report, sensitivity, storage
 from .solvers import base as solver_base
 
 FRONTEND_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
@@ -50,10 +50,22 @@ def create_app() -> Flask:
 
     @app.route("/api/solvers")
     def solvers():
+        defaults = {n: solver_base.default_params(n)
+                    for n in solver_base.available_solvers()}
+        # The multi-objective engine is driven by a dedicated endpoint but
+        # advertises its defaults / supported objectives here so every page
+        # shares one schema.
+        defaults[multiobjective.PARETO_SOLVER_NAME] = {
+            k: v for k, v in multiobjective.DEFAULT_PARAMS.items()
+            if k not in ("eval_cache_size", "archive_cap")
+        }
         return jsonify({
-            "solvers": solver_base.available_solvers(),
-            "defaults": {n: solver_base.default_params(n)
-                         for n in solver_base.available_solvers()},
+            "solvers": solver_base.available_solvers() + [multiobjective.PARETO_SOLVER_NAME],
+            "defaults": defaults,
+            "multi_objective": {
+                "solver": multiobjective.PARETO_SOLVER_NAME,
+                "objectives": list(multiobjective.SUPPORTED_OBJECTIVES),
+            },
         })
 
     # ------------------------------------------------------------------ #
@@ -155,6 +167,46 @@ def create_app() -> Flask:
         return jsonify({"error": "not found"}), 404
 
     # ------------------------------------------------------------------ #
+    # Multi-objective (Pareto front) solving
+    # ------------------------------------------------------------------ #
+    @app.route("/api/problems/<problem_id>/pareto", methods=["POST"])
+    def pareto_solve(problem_id: str):
+        problem = storage.load_problem(problem_id)
+        if problem is None:
+            return jsonify({"error": "not found"}), 404
+        data = request.get_json(force=True) or {}
+        objective_names = data.get("objectives") or ["makespan", "overtime_cost"]
+        params = dict(multiobjective.DEFAULT_PARAMS)
+        params.update(data.get("params") or {})
+        minimize = data.get("minimize")
+        try:
+            run, sols = multiobjective.run_pareto(
+                problem, objective_names, params, minimize=minimize)
+            storage.save_pareto_bundle(problem_id, run, sols)
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
+        return jsonify({"run": run.to_dict(),
+                        "solutions": [s.to_dict() for s in sols]}), 201
+
+    @app.route("/api/problems/<problem_id>/pareto", methods=["GET"])
+    def pareto_list(problem_id: str):
+        return jsonify({"runs": storage.list_pareto_runs(problem_id)})
+
+    @app.route("/api/problems/<problem_id>/pareto/<run_id>", methods=["GET"])
+    def pareto_get(problem_id: str, run_id: str):
+        run = storage.load_pareto_run(problem_id, run_id)
+        if run is None:
+            return jsonify({"error": "not found"}), 404
+        return jsonify(run.to_dict())
+
+    @app.route("/api/problems/<problem_id>/pareto/<run_id>", methods=["DELETE"])
+    def pareto_delete(problem_id: str, run_id: str):
+        if storage.load_pareto_run(problem_id, run_id) is None:
+            return jsonify({"error": "not found"}), 404
+        removed = storage.delete_pareto_run(problem_id, run_id)
+        return jsonify({"ok": True, "deleted_solutions": removed})
+
+    # ------------------------------------------------------------------ #
     # Analysis
     # ------------------------------------------------------------------ #
     @app.route("/api/problems/<problem_id>/sensitivity", methods=["POST"])
@@ -189,6 +241,21 @@ def create_app() -> Flask:
         sols = [s for s in sols if s is not None]
         best_obj = min((s.objective_value for s in sols
                         if s.objective_value is not None), default=None)
+
+        # Best value per canonical objective across the compared set.  This is
+        # dimension-aware so single-objective and Pareto solutions compare
+        # fairly: a Pareto point can be "best on overtime" without being the
+        # scalar best.  Values always come straight from solution.objectives,
+        # never re-computed here (one solve -> one set of numbers).
+        best_by_objective: Dict[str, float] = {}
+        for s in sols:
+            for name, val in (s.objectives or {}).items():
+                if val is None:
+                    continue
+                cur = best_by_objective.get(name)
+                if cur is None or val < cur:
+                    best_by_objective[name] = val
+
         rows = []
         for s in sorted(sols, key=lambda s: (s.objective_value is None,
                                              s.objective_value or 0)):
@@ -198,8 +265,14 @@ def create_app() -> Flask:
                                   if s.objective_value is not None and best_obj is not None
                                   else None),
                 "is_best": s.objective_value == best_obj,
+                "best_by_objective": {
+                    name: (s.objectives.get(name) == val)
+                    for name, val in best_by_objective.items()
+                    if name in (s.objectives or {})
+                },
             })
-        return jsonify({"solutions": rows, "best_objective": best_obj})
+        return jsonify({"solutions": rows, "best_objective": best_obj,
+                        "best_by_objective": best_by_objective})
 
     @app.route("/api/problems/<problem_id>/report", methods=["POST"])
     def make_report(problem_id: str):

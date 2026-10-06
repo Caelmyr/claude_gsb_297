@@ -95,9 +95,9 @@ async function loadLatest() {
   document.getElementById('latest-rows').innerHTML = rows.slice(0, 12).map(s => `
     <tr>
       <td class="mono">${escapeHtml(s.problem)}</td>
-      <td>${escapeHtml(solverLabel(s.solver))}</td>
+      <td>${s.pareto_run_id ? '<span class="badge info">前沿</span> ' : ''}${escapeHtml(solverLabel(s.solver))}</td>
       <td>${statusBadge(s.status)}</td>
-      <td class="num">${fmt(s.objective_value)}</td>
+      <td class="num">${s.objectives ? escapeHtml(objectiveVectorText(s)) : fmt(s.objective_value)}</td>
       <td class="num">${fmt(s.makespan)}</td>
       <td class="small muted">${escapeHtml(s.created_at)}</td>
     </tr>`).join('') || '<tr><td colspan="6" class="empty">暂无求解结果。</td></tr>';

@@ -73,6 +73,7 @@ def _subdirs(problem_id: str) -> List[str]:
         os.path.join(base, "configs"),
         os.path.join(base, "reports"),
         os.path.join(base, "sensitivity"),
+        os.path.join(base, "pareto"),
     ]
 
 
@@ -304,6 +305,12 @@ def list_solutions(problem_id: str) -> List[Dict[str, Any]]:
             "solve_time": d.get("solve_time"),
             "created_at": d.get("created_at"),
             "n_assignments": len(d.get("assignments", [])),
+            # Canonical vector + Pareto bookkeeping so list views can show
+            # both objective values without loading every full solution.
+            "objectives": d.get("objectives", {}),
+            "optimized_objectives": d.get("optimized_objectives", []),
+            "pareto_run_id": d.get("pareto_run_id"),
+            "pareto_rank": d.get("pareto_rank"),
         })
     return sorted(out, key=lambda s: s.get("created_at", ""))
 
@@ -326,6 +333,96 @@ def delete_solution(problem_id: str, solution_id: str) -> bool:
     with problem_lock(problem_id):
         os.remove(path)
     return True
+
+
+# --------------------------------------------------------------------------- #
+# Pareto runs (one header + many member solutions)
+# --------------------------------------------------------------------------- #
+
+def save_pareto_run(problem_id: str, run: models.ParetoRun) -> models.ParetoRun:
+    """Persist a Pareto run header."""
+    ensure_instance_dirs(problem_id)
+    with problem_lock(problem_id):
+        path = os.path.join(instance_dir(problem_id), "pareto", f"{run.id}.json")
+        atomic_write_json(path, run.to_dict())
+    return run
+
+
+def save_pareto_bundle(problem_id: str, run: models.ParetoRun,
+                       solutions: List[models.Solution]) -> models.ParetoRun:
+    """Write the run header and every member solution under ONE lock, so a
+    multi-objective run is visible either in full or not at all."""
+    ensure_instance_dirs(problem_id)
+    sdir = os.path.join(instance_dir(problem_id), "solutions")
+    rpath = os.path.join(instance_dir(problem_id), "pareto", f"{run.id}.json")
+    with problem_lock(problem_id):
+        atomic_write_json(rpath, run.to_dict())
+        for sol in solutions:
+            atomic_write_json(os.path.join(sdir, f"{sol.id}.json"), sol.to_dict())
+    return run
+
+
+def list_pareto_runs(problem_id: str) -> List[Dict[str, Any]]:
+    pdir = os.path.join(instance_dir(problem_id), "pareto")
+    if not os.path.isdir(pdir):
+        return []
+    out = []
+    for name in sorted(os.listdir(pdir)):
+        if not name.endswith(".json"):
+            continue
+        try:
+            d = _read_json(os.path.join(pdir, name))
+        except (OSError, json.JSONDecodeError):
+            continue
+        # light summary for list views (no full point payload needed)
+        out.append({
+            "id": d.get("id"),
+            "solver": d.get("solver"),
+            "objectives": d.get("objectives", []),
+            "n_points": len(d.get("points", [])),
+            "n_generated": d.get("n_generated"),
+            "n_returned": d.get("n_returned"),
+            "truncated": d.get("truncated", False),
+            "status": d.get("status"),
+            "solve_time": d.get("solve_time"),
+            "created_at": d.get("created_at"),
+        })
+    return sorted(out, key=lambda r: r.get("created_at", ""))
+
+
+def load_pareto_run(problem_id: str, run_id: str) -> Optional[models.ParetoRun]:
+    if not is_safe_id(run_id):
+        return None
+    path = os.path.join(instance_dir(problem_id), "pareto", f"{run_id}.json")
+    if not os.path.isfile(path):
+        return None
+    return models.ParetoRun.from_dict(_read_json(path))
+
+
+def delete_pareto_run(problem_id: str, run_id: str) -> int:
+    """Remove the run header and all its member solutions.  Returns the number
+    of member solution files deleted."""
+    if not is_safe_id(run_id):
+        return 0
+    run = load_pareto_run(problem_id, run_id)
+    if run is None:
+        return 0
+    sdir = os.path.join(instance_dir(problem_id), "solutions")
+    rpath = os.path.join(instance_dir(problem_id), "pareto", f"{run_id}.json")
+    removed = 0
+    with problem_lock(problem_id):
+        for point in run.points:
+            spath = os.path.join(sdir, f"{point.solution_id}.json")
+            try:
+                os.remove(spath)
+                removed += 1
+            except OSError:
+                pass
+        try:
+            os.remove(rpath)
+        except OSError:
+            pass
+    return removed
 
 
 # --------------------------------------------------------------------------- #

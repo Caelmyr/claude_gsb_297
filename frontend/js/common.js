@@ -5,12 +5,13 @@ const API = '/api';
 /* ---- constants (kept in sync with backend/models.py) ---------------- */
 const RESOURCE_TYPES = ['personnel', 'equipment', 'time'];
 const OBJECTIVE_TYPES = ['makespan', 'total_completion', 'weighted_completion',
-  'tardiness', 'cost', 'custom'];
+  'tardiness', 'cost', 'overtime_cost', 'custom'];
 const HARD_CONSTRAINT_TYPES = ['precedence', 'time_window', 'fixed_start',
   'resource_capacity', 'non_overlap', 'max_concurrent', 'resource_assignment'];
 const SOFT_CONSTRAINT_TYPES = ['due_date', 'preferred_window', 'min_gap',
   'resource_balance', 'setup_time', 'max_makespan'];
 const SOLVER_NAMES = ['lp', 'ip', 'genetic', 'simulated_annealing', 'greedy'];
+const PARETO_SOLVER = 'nsga2';
 
 const SOLVER_LABELS = {
   lp: '线性规划（松弛）',
@@ -18,6 +19,7 @@ const SOLVER_LABELS = {
   genetic: '遗传算法',
   simulated_annealing: '模拟退火',
   greedy: '贪心（优先规则）',
+  nsga2: '多目标 NSGA-II（Pareto 前沿）',
 };
 
 const OBJECTIVE_LABELS = {
@@ -26,6 +28,7 @@ const OBJECTIVE_LABELS = {
   weighted_completion: '加权完工时间',
   tardiness: '加权拖期',
   cost: '资源成本',
+  overtime_cost: '加班成本',
   custom: '自定义组合',
 };
 
@@ -69,6 +72,48 @@ function constraintLabel(t) {
 }
 function solverLabel(n) { return SOLVER_LABELS[n] || n; }
 function statusLabel(s) { return STATUS_LABELS[s] || s; }
+
+/* Short labels for the canonical objective vector used in table columns and
+   axis titles; mirrors backend.objectives.CANONICAL_OBJECTIVES. */
+const OBJECTIVE_SHORT = {
+  makespan: '完工',
+  total_completion: '总完工',
+  weighted_completion: '加权完工',
+  tardiness: '拖期',
+  cost: '成本',
+  overtime_cost: '加班',
+};
+function objectiveShort(t) { return OBJECTIVE_SHORT[t] || t; }
+
+/* The canonical value of an objective for a solution.  Every page reads the
+   stored ``objectives`` vector (computed once at solve time) and never a
+   re-derived number, so the two Pareto objectives stay identical across the
+   results / compare / Gantt / report pages. */
+function solutionObjective(s, name) {
+  if (s && s.objectives && Object.prototype.hasOwnProperty.call(s.objectives, name)) {
+    return s.objectives[name];
+  }
+  if (name === 'makespan') return s ? s.makespan : null;
+  if (name === 'cost') return s?.metrics?.resource_cost;
+  if (name === 'overtime_cost') return s?.metrics?.overtime_cost;
+  if (name === 'tardiness') return s?.metrics?.total_tardiness;
+  return s?.metrics?.[name];
+}
+
+/* What a run actually optimised (fallback for legacy single-objective
+   solutions that predate the field). */
+function optimizedObjectives(s) {
+  if (s && Array.isArray(s.optimized_objectives) && s.optimized_objectives.length) {
+    return s.optimized_objectives;
+  }
+  return ['makespan'];
+}
+
+/* Compact "完工 20 · 加班 120" rendering of the optimised vector. */
+function objectiveVectorText(s) {
+  return optimizedObjectives(s)
+    .map(n => `${objectiveShort(n)} ${fmt(solutionObjective(s, n))}`).join(' · ');
+}
 
 const PALETTE = ['#4e79a7', '#f28e2b', '#e15759', '#76b7b2', '#59a14f',
   '#edc949', '#af7aa1', '#ff9da7', '#9c755f', '#bab0ab', '#86bcb6', '#b07aa1'];
@@ -130,6 +175,7 @@ const NAV = [
   ['solvers.html', '求解器与参数'],
   ['gantt.html', '甘特图'],
   ['results.html', '结果与目标值'],
+  ['pareto.html', '多目标前沿'],
   ['sensitivity.html', '敏感性分析'],
   ['compare.html', '方案对比'],
   ['report.html', '报告生成'],

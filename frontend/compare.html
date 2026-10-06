@@ -33,17 +33,19 @@
 
     <div class="card" id="result-card" style="display:none">
       <h2>对比结果</h2>
+      <p class="small muted" id="chart-hint"></p>
       <div class="chart-wrap" id="bar-chart"></div>
-      <table class="mt"><thead><tr>
-        <th>求解器</th><th>状态</th><th class="num">目标值</th><th class="num">与最优差距</th>
-        <th class="num">完工时间</th><th class="num">拖期</th><th class="num">成本</th>
+      <div class="chart-wrap" id="scatter-chart" style="display:none"></div>
+      <table class="mt"><thead><tr id="cmp-head">
+        <th>求解器</th><th>来源</th><th>状态</th><th class="num">标量目标值</th><th class="num">与最优差距</th>
+        <th class="num">完工时间</th><th class="num">拖期</th><th class="num">成本</th><th class="num">加班</th>
         <th class="num">耗时(s)</th><th class="num">下界</th><th></th>
       </tr></thead><tbody id="rows"></tbody></table>
     </div>
 
     <div class="card">
       <h2>全部方案一览</h2>
-      <table><thead><tr><th>ID</th><th>求解器</th><th class="num">目标值</th><th class="num">完工时间</th><th>创建时间</th></tr></thead>
+      <table><thead><tr><th>ID</th><th>求解器</th><th>来源</th><th>优化口径</th><th class="num">目标值</th><th class="num">完工/加班</th><th>创建时间</th></tr></thead>
         <tbody id="all-rows"></tbody></table>
     </div>
   </main>
@@ -68,11 +70,16 @@ async function load() {
 
 function renderChecks() {
   const el = document.getElementById('solution-checks');
-  el.innerHTML = solutions.map((s, i) => `
+  el.innerHTML = solutions.map((s) => {
+    const tag = s.pareto_run_id
+      ? `<span class="badge info">前沿#${s.pareto_rank ?? ''}</span> ` : '';
+    return `
     <label style="margin:0 16px 8px 0;font-size:13px;color:var(--ink)">
       <input type="checkbox" value="${s.id}" style="width:auto;margin-right:5px">
-      ${escapeHtml(solverLabel(s.solver))} <span class="muted">(${fmt(s.objective_value)})</span>
-    </label>`).join('') || '<span class="muted">暂无求解结果。</span>';
+      ${tag}${escapeHtml(solverLabel(s.solver))}
+      <span class="muted">(${s.pareto_run_id ? objectiveVectorText(s) : fmt(s.objective_value)})</span>
+    </label>`;
+  }).join('') || '<span class="muted">暂无求解结果。</span>';
 }
 
 function selected() {
@@ -83,6 +90,45 @@ function toggleAll(on) {
   document.querySelectorAll('#solution-checks input').forEach(i => i.checked = on);
 }
 
+/* Group Pareto members by run so each front is drawn as one series and
+   ordinary single-objective solutions appear on the same axes. */
+function scatterSeries(rows) {
+  const groups = new Map();
+  const singles = [];
+  for (const s of rows) {
+    const v = s.objectives || {};
+    if (s.pareto_run_id && v.makespan != null && v.overtime_cost != null) {
+      if (!groups.has(s.pareto_run_id)) groups.set(s.pareto_run_id, []);
+      groups.get(s.pareto_run_id).push(s);
+    } else if (v.makespan != null && v.overtime_cost != null) {
+      singles.push(s);
+    }
+  }
+  const palette = ['#2563eb', '#7e22ce', '#0d9488', '#b45309'];
+  const series = [];
+  let gi = 0;
+  for (const [runId, members] of groups) {
+    series.push({
+      name: `前沿 ${runId.slice(-6)}`,
+      color: palette[gi++ % palette.length],
+      points: members.map(s => ({
+        x: s.objectives.makespan, y: s.objectives.overtime_cost,
+        label: '#' + (s.pareto_rank ?? ''), payload: s.id,
+      })),
+    });
+  }
+  if (singles.length) {
+    series.push({
+      name: '单目标方案', color: '#e15759',
+      points: singles.map(s => ({
+        x: s.objectives.makespan, y: s.objectives.overtime_cost,
+        label: solverLabel(s.solver), payload: s.id, r: 6,
+      })),
+    });
+  }
+  return series;
+}
+
 async function compare() {
   const ids = selected();
   if (!ids.length) return toast('请至少选择一个方案', 'error');
@@ -90,20 +136,54 @@ async function compare() {
     method: 'POST', body: JSON.stringify({ solution_ids: ids }),
   });
   document.getElementById('result-card').style.display = 'block';
-  barChart(document.getElementById('bar-chart'), {
-    labels: rows.map(s => solverLabel(s.solver) + (s.is_best ? ' ★' : '')),
-    values: rows.map(s => s.objective_value ?? 0),
-    color: '#59a14f',
-  });
+
+  // Scalar bar chart only for solutions that actually have a scalar objective;
+  // Pareto points have none, so they are shown exclusively on the 2-D front.
+  const scalarRows = rows.filter(s => s.objective_value != null);
+  if (scalarRows.length) {
+    document.getElementById('bar-chart').style.display = 'block';
+    barChart(document.getElementById('bar-chart'), {
+      labels: scalarRows.map(s => solverLabel(s.solver) + (s.is_best ? ' ★' : '')),
+      values: scalarRows.map(s => s.objective_value ?? 0),
+      color: '#59a14f',
+    });
+  } else {
+    document.getElementById('bar-chart').style.display = 'none';
+  }
+
+  const series = scatterSeries(rows);
+  const has2d = series.some(g => g.points.length);
+  document.getElementById('scatter-chart').style.display = has2d ? 'block' : 'none';
+  document.getElementById('chart-hint').textContent = has2d
+    ? '二维目标视图：同一坐标内叠加 Pareto 前沿方案与普通单目标方案，可直观看出谁也压不倒谁。'
+    : '';
+  if (has2d) {
+    scatterChart(document.getElementById('scatter-chart'), {
+      series, xLabel: objectiveShort('makespan'), yLabel: objectiveShort('overtime_cost'),
+      onPoint: (sid) => { window.location.href =
+        `gantt.html?id=${encodeURIComponent(problem.id)}&solution=${encodeURIComponent(sid)}`; },
+    });
+  }
+
+  const best = (s, name) => s.best_by_objective && s.best_by_objective[name];
+  const cell = (s, name) => {
+    const v = solutionObjective(s, name);
+    if (v == null) return '<td class="num">—</td>';
+    return `<td class="num" ${best(s, name) ? 'style="background:#f0fdf4;font-weight:700"' : ''}>${fmt(v)}${best(s, name) ? ' ★' : ''}</td>`;
+  };
   document.getElementById('rows').innerHTML = rows.map(s => `
-    <tr ${s.is_best ? 'style="background:#f0fdf4"' : ''}>
-      <td>${escapeHtml(solverLabel(s.solver))} ${s.is_best ? '<span class="badge ok">最优</span>' : ''}</td>
+    <tr ${s.is_best ? 'style="background:#fefce8"' : ''}>
+      <td>${escapeHtml(solverLabel(s.solver))} ${s.is_best ? '<span class="badge ok">标量最优</span>' : ''}</td>
+      <td>${s.pareto_run_id
+        ? `<span class="badge info">多目标前沿</span>`
+        : '<span class="muted">单目标</span>'}</td>
       <td>${statusBadge(s.status)}</td>
       <td class="num"><b>${fmt(s.objective_value)}</b></td>
       <td class="num">${s.delta_vs_best == null ? '—' : (s.delta_vs_best > 0 ? '+' : '') + fmt(s.delta_vs_best)}</td>
-      <td class="num">${fmt(s.makespan)}</td>
-      <td class="num">${fmt(s.metrics?.total_tardiness)}</td>
-      <td class="num">${fmt(s.metrics?.resource_cost)}</td>
+      ${cell(s, 'makespan')}
+      ${cell(s, 'tardiness')}
+      ${cell(s, 'cost')}
+      ${cell(s, 'overtime_cost')}
       <td class="num">${fmt(s.solve_time)}</td>
       <td class="num">${fmt(s.lower_bound)}</td>
       <td><a href="gantt.html?id=${encodeURIComponent(problem.id)}&solution=${encodeURIComponent(s.id)}">甘特图</a></td>
@@ -113,9 +193,12 @@ async function compare() {
 function renderAll() {
   document.getElementById('all-rows').innerHTML = solutions.map(s => `
     <tr><td class="mono">${escapeHtml(s.id)}</td><td>${escapeHtml(solverLabel(s.solver))}</td>
-      <td class="num">${fmt(s.objective_value)}</td><td class="num">${fmt(s.makespan)}</td>
+      <td>${s.pareto_run_id ? '<span class="badge info">前沿</span>' : '单目标'}</td>
+      <td class="small">${escapeHtml((s.optimized_objectives || ['makespan']).map(objectiveLabel).join(' + '))}</td>
+      <td class="num">${fmt(s.objective_value)}</td>
+      <td class="num">${fmt(solutionObjective(s, 'makespan'))} / ${fmt(solutionObjective(s, 'overtime_cost'))}</td>
       <td class="small muted">${escapeHtml(s.created_at)}</td></tr>`).join('')
-    || '<tr><td colspan="5" class="empty">暂无求解结果。</td></tr>';
+    || '<tr><td colspan="7" class="empty">暂无求解结果。</td></tr>';
 }
 
 load().catch(e => toast(e.message, 'error'));

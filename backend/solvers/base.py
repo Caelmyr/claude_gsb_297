@@ -24,22 +24,38 @@ class Solver(ABC):
                       status: str = "feasible", solve_time: float = 0.0,
                       message: str = "", params: Dict[str, Any] | None = None,
                       lower_bound: float | None = None,
-                      extra_metrics: Dict[str, Any] | None = None) -> models.Solution:
-        """Build a Solution from a start-time dict, filling objective/metrics."""
-        from .. import objectives
+                      extra_metrics: Dict[str, Any] | None = None,
+                      objectives: Dict[str, float] | None = None,
+                      optimized_objectives: List[str] | None = None,
+                      pareto_run_id: str | None = None,
+                      pareto_rank: int | None = None) -> models.Solution:
+        """Build a Solution from a start-time dict, filling objective/metrics.
+
+        ``objectives`` is the canonical vector for the schedule; when omitted
+        it is computed here.  ``optimized_objectives`` declares what the run
+        actually optimised (default: the problem's single configured objective,
+        or every weighted primitive for a ``custom`` objective)."""
+        from .. import objectives as obj_mod
         from .schedule_builder import schedule_to_assignments
 
-        soft = objectives.soft_penalty(problem, starts)
-        obj = objectives.evaluate_objective(problem, starts, soft)
-        ms = objectives.makespan(problem, starts)
-        metrics = objectives.compute_metrics(problem, starts)
+        soft = obj_mod.soft_penalty(problem, starts)
+        obj = obj_mod.evaluate_objective(problem, starts, soft)
+        ms = obj_mod.makespan(problem, starts)
+        metrics = obj_mod.compute_metrics(problem, starts)
         if extra_metrics:
             metrics.update(extra_metrics)
-        violations = objectives.hard_violations(problem, starts)
+        violations = obj_mod.hard_violations(problem, starts)
         if violations:
             status = "infeasible"
             if not message:
                 message = "; ".join(violations[:3])
+
+        if optimized_objectives is None:
+            if problem.objective.type == "custom":
+                optimized_objectives = [k for k, w in problem.objective.weights.items()
+                                        if w != 0] or ["makespan"]
+            else:
+                optimized_objectives = [problem.objective.type]
 
         return models.Solution(
             id=models.new_id("sol"),
@@ -54,6 +70,11 @@ class Solver(ABC):
             solve_time=round(solve_time, 4),
             message=message,
             lower_bound=lower_bound,
+            objectives=objectives if objectives is not None
+            else obj_mod.canonical_objectives(problem, starts),
+            optimized_objectives=optimized_objectives,
+            pareto_run_id=pareto_run_id,
+            pareto_rank=pareto_rank,
         )
 
     def run_timed(self, problem: models.Problem, params: Dict[str, Any],
@@ -78,7 +99,15 @@ def evaluate_priorities(problem: models.Problem,
     from .schedule_builder import decode
     from .. import objectives
 
-    starts = decode(problem, priorities)
+    # When the single scalar objective is overtime cost, the ASAP decoder
+    # cannot express "wait for the regular shift"; the multi-objective engine
+    # carries an overtime-tolerance gene, but scalar GA/SA do not.  Decode with
+    # the maximal overtime weight in that one case so the scalar overtime
+    # objective is actually optimisable.
+    from .schedule_builder import max_overtime_weight
+    weight = (max_overtime_weight(problem)
+              if problem.objective.type == "overtime_cost" else 0.0)
+    starts = decode(problem, priorities, overtime_weight=weight)
     soft = objectives.soft_penalty(problem, starts)
     obj = objectives.evaluate_objective(problem, starts, soft)
     missing = len(problem.tasks) - len(starts)

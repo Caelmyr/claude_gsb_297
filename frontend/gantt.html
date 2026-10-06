@@ -71,7 +71,10 @@ async function loadSolutions(preferred) {
   const { solutions } = await api(`/problems/${problem.id}/solutions`);
   const sel = document.getElementById('solution-picker');
   sel.innerHTML = solutions.length
-    ? solutions.map(s => `<option value="${s.id}" ${s.id === preferred ? 'selected' : ''}>${escapeHtml(SOLVER_LABELS[s.solver] || s.solver)} · 目标 ${fmt(s.objective_value)} · ${escapeHtml(s.created_at)}</option>`).join('')
+    ? solutions.map(s => {
+        const tag = s.pareto_run_id ? `[前沿#${s.pareto_rank}] ` : '';
+        return `<option value="${s.id}" ${s.id === preferred ? 'selected' : ''}>${tag}${escapeHtml(SOLVER_LABELS[s.solver] || s.solver)} · ${escapeHtml(objectiveVectorText(s))} · ${escapeHtml(s.created_at)}</option>`;
+      }).join('')
     : '<option value="">— 暂无求解结果 —</option>';
   if (solutions.length) {
     const id = preferred || solutions[solutions.length - 1].id;
@@ -93,7 +96,8 @@ function render() {
   document.getElementById('chart-title').textContent =
     `甘特图 — ${SOLVER_LABELS[solution.solver] || solution.solver}（${mode === 'task' ? '按任务' : '按资源'}）`;
   document.getElementById('sol-meta').textContent =
-    `目标 ${fmt(solution.objective_value)} · 完工时间 ${fmt(solution.makespan)} · ${statusLabel(solution.status)}`;
+    `${objectiveVectorText(solution)} · ${statusLabel(solution.status)}`
+    + (solution.pareto_run_id ? ` · Pareto 前沿 #${solution.pareto_rank}` : '');
   renderGantt(document.getElementById('gantt-container'), {
     problem, assignments: solution.assignments, mode,
     title: `排程 — ${SOLVER_LABELS[solution.solver] || solution.solver}`,
@@ -111,7 +115,7 @@ async function quickSolve() {
   const sol = await api(`/problems/${problem.id}/solve`, {
     method: 'POST', body: JSON.stringify({ solver: quickSel.value }),
   });
-  toast(`已用 ${SOLVER_LABELS[quickSel.value]} 求解：目标值 ${fmt(sol.objective_value)}`);
+  toast(`已用 ${SOLVER_LABELS[quickSel.value]} 求解：${objectiveVectorText(sol)}`);
   await loadSolutions(sol.id);
 }
 

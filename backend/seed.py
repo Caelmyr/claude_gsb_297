@@ -11,14 +11,21 @@ def _jobshop() -> models.Problem:
     p = models.Problem(
         id="demo_jobshop",
         name="作业车间示例",
-        description="3 个作业在 2 台机器上加工，含先后顺序链，目标为最小化完工时间。",
+        description=("3 个作业在 2 台机器上加工，含先后顺序链。机器分正常班次与"
+                     "加班时段：赶工期要吃加班，等班次则完工更晚，是完工时间/"
+                     "加班成本双目标折中的典型场景。"),
         horizon=40,
         time_unit="小时",
         resources=[
+            # 正常班次 [0,8) 与 [24,32)；其余可用时段按加班单价计费。
             models.Resource(id="M1", name="机器 A", type="equipment", capacity=1,
-                            cost_per_unit=5.0),
+                            cost_per_unit=5.0,
+                            regular_hours=[[0, 8], [24, 32]],
+                            overtime_cost_per_unit=4.0),
             models.Resource(id="M2", name="机器 B", type="equipment", capacity=1,
-                            cost_per_unit=8.0),
+                            cost_per_unit=8.0,
+                            regular_hours=[[0, 8], [24, 32]],
+                            overtime_cost_per_unit=6.0),
         ],
         tasks=[
             models.Task(id="J1A", name="作业1 工序A", duration=4,

@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>多目标前沿 — 排程求解系统</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">排程求解系统</div>
+    <div class="brand-sub">运筹优化与排程求解</div>
+    <nav id="nav"></nav>
+    <div class="section-label">问题实例</div>
+    <select id="problem-picker"></select>
+  </aside>
+  <main class="main">
+    <div class="page-head">
+      <h1>多目标 Pareto 前沿</h1>
+      <span class="sub">同时优化完工时间与加班成本，在一组互不支配的方案中挑选折中</span>
+    </div>
+
+    <div class="card">
+      <h2>发起一次多目标求解</h2>
+      <p class="small muted">前沿上的每个方案都会像普通单目标方案一样存入结果库，
+        自动出现在「结果与目标值」「方案对比」「甘特图」和报告中；同一次求解优化了
+        哪些目标、每个方案的两个目标值分别是多少，在所有页面口径完全一致。</p>
+      <div class="form-grid">
+        <div><label>目标 1（横轴）</label><select id="obj-x"></select></div>
+        <div><label>目标 2（纵轴）</label><select id="obj-y"></select></div>
+        <div><label>种群规模</label><input id="p-pop" type="number" value="48"></div>
+        <div><label>迭代代数</label><input id="p-gen" type="number" value="80"></div>
+        <div><label>时间上限(秒)</label><input id="p-time" type="number" value="60"></div>
+        <div><label>前沿最多保留点数</label><input id="p-max" type="number" value="40"></div>
+      </div>
+      <div class="btn-row">
+        <button class="btn primary" id="run-btn" onclick="runPareto()">▶ 求解 Pareto 前沿</button>
+        <span class="small muted" id="run-hint"></span>
+      </div>
+      <p class="small muted" id="shift-hint"></p>
+    </div>
+
+    <div class="card" id="front-card" style="display:none">
+      <div class="flex">
+        <h2 style="margin:0" id="front-title">Pareto 前沿</h2>
+        <div class="spacer"></div>
+        <span class="badge info" id="front-meta"></span>
+      </div>
+      <p class="small muted" id="front-note"></p>
+      <div class="chart-wrap" id="front-chart"></div>
+      <p class="small muted">点击任意前沿点查看该折中方案；也可在下表中点选。</p>
+      <table><thead><tr>
+        <th class="num">前沿序号</th><th class="num" id="th-x">目标1</th>
+        <th class="num" id="th-y">目标2</th><th>求解器</th>
+        <th class="num">耗时(s)</th><th></th>
+      </tr></thead><tbody id="front-rows"></tbody></table>
+    </div>
+
+    <div class="card" id="detail-card" style="display:none">
+      <div class="flex">
+        <h2 style="margin:0" id="detail-title">折中方案</h2>
+        <div class="spacer"></div>
+        <a class="btn sm" id="detail-gantt" href="#">查看甘特图</a>
+      </div>
+      <div class="grid cols-4 mt" id="detail-stats"></div>
+      <p class="small muted" id="detail-meta"></p>
+    </div>
+
+    <div class="card">
+      <h2>历史多目标运行</h2>
+      <table><thead><tr>
+        <th>运行 ID</th><th>优化目标</th><th class="num">前沿点数</th>
+        <th class="num">生成/保留</th><th>状态</th><th>时间</th><th></th>
+      </tr></thead><tbody id="run-rows"></tbody></table>
+    </div>
+  </main>
+</div>
+<script src="js/common.js"></script>
+<script src="js/charts.js"></script>
+<script>
+let problem = null;
+let currentRun = null;
+let currentSols = [];
+let meta = null;
+const OBJ_CHOICES = ['makespan', 'overtime_cost', 'total_completion',
+  'weighted_completion', 'tardiness', 'cost'];
+
+initSidebar('pareto.html');
+
+async function load() {
+  const id = currentProblemId();
+  if (!id) return;
+  problem = await api('/problems/' + id);
+  meta = await api('/solvers');
+  const d = (meta.defaults && meta.defaults[PARETO_SOLVER]) || {};
+  document.getElementById('p-pop').value = d.population_size ?? 48;
+  document.getElementById('p-gen').value = d.generations ?? 80;
+  document.getElementById('p-time').value = d.time_limit ?? 60;
+  document.getElementById('p-max').value = d.max_points ?? 40;
+  for (const [sel, def] of [['obj-x', 'makespan'], ['obj-y', 'overtime_cost']]) {
+    const el = document.getElementById(sel);
+    el.innerHTML = OBJ_CHOICES.map(n =>
+      `<option value="${n}" ${n === def ? 'selected' : ''}>${objectiveLabel(n)}</option>`).join('');
+  }
+  const otResources = problem.resources.filter(r => Array.isArray(r.regular_hours)).length;
+  document.getElementById('shift-hint').textContent =
+    otResources ? `本实例有 ${otResources} 个资源定义了正常班次/加班单价，完工时间与加班成本存在真实折中。`
+                : '提示：当前实例没有资源定义「正常班次窗口」，加班成本恒为 0。请到「资源管理」为资源填写正常时段与加班单价。';
+  await loadRuns();
+}
+
+async function loadRuns() {
+  const { runs } = await api(`/problems/${problem.id}/pareto`).catch(() => ({ runs: [] }));
+  document.getElementById('run-rows').innerHTML = runs.slice().reverse().map(r => `
+    <tr>
+      <td class="mono">${escapeHtml(r.id)}</td>
+      <td>${(r.objectives || []).map(objectiveLabel).join(' + ')}</td>
+      <td class="num">${r.n_points}</td>
+      <td class="num">${r.n_generated ?? r.n_points}/${r.n_returned ?? r.n_points}${r.truncated ? ' <span class="badge warn">已降采样</span>' : ''}</td>
+      <td>${statusBadge(r.status)}</td>
+      <td class="small muted">${escapeHtml(r.created_at)}</td>
+      <td>
+        <button class="btn sm" onclick='openRun(${JSON.stringify(r.id)})'>打开前沿</button>
+        <button class="btn sm danger" onclick='removeRun(${JSON.stringify(r.id)})'>整批删除</button>
+      </td>
+    </tr>`).join('') || '<tr><td colspan="7" class="empty">还没有多目标运行。</td></tr>';
+}
+
+async function runPareto() {
+  const btn = document.getElementById('run-btn');
+  btn.disabled = true; btn.textContent = '求解中（可能耗时较长）…';
+  document.getElementById('run-hint').textContent = '正在演化 Pareto 前沿…';
+  try {
+    const body = {
+      objectives: [document.getElementById('obj-x').value, document.getElementById('obj-y').value],
+      params: {
+        population_size: Number(document.getElementById('p-pop').value),
+        generations: Number(document.getElementById('p-gen').value),
+        time_limit: Number(document.getElementById('p-time').value),
+        max_points: Number(document.getElementById('p-max').value),
+      },
+    };
+    const res = await api(`/problems/${problem.id}/pareto`,
+      { method: 'POST', body: JSON.stringify(body) });
+    currentRun = res.run;
+    currentSols = res.solutions;
+    renderFront();
+    await loadRuns();
+    toast(`前沿求解完成：${res.run.n_returned} 个互不支配方案`);
+  } catch (e) {
+    toast(e.message, 'error');
+  } finally {
+    btn.disabled = false; btn.textContent = '▶ 求解 Pareto 前沿';
+    document.getElementById('run-hint').textContent = '';
+  }
+}
+
+async function openRun(id) {
+  currentRun = await api(`/problems/${problem.id}/pareto/${id}`);
+  const ids = currentRun.points.map(p => p.solution_id);
+  currentSols = [];
+  for (const sid of ids) {
+    // light loading: fetch each member (fronts are capped at max_points)
+    currentSols.push(await api(`/problems/${problem.id}/solutions/${sid}`));
+  }
+  renderFront();
+}
+
+async function removeRun(id) {
+  if (!confirm('删除该前沿运行及其全部成员方案？此操作不可恢复。')) return;
+  const r = await api(`/problems/${problem.id}/pareto/${id}`, { method: 'DELETE' });
+  toast(`已删除前沿及 ${r.deleted_solutions} 个成员方案`);
+  if (currentRun && currentRun.id === id) {
+    currentRun = null; currentSols = [];
+    document.getElementById('front-card').style.display = 'none';
+    document.getElementById('detail-card').style.display = 'none';
+  }
+  await loadRuns();
+}
+
+function renderFront() {
+  const ox = currentRun.objectives[0], oy = currentRun.objectives[1];
+  document.getElementById('front-card').style.display = 'block';
+  document.getElementById('front-title').textContent =
+    `Pareto 前沿 — ${objectiveLabel(ox)} × ${objectiveLabel(oy)}`;
+  document.getElementById('th-x').textContent = objectiveLabel(ox);
+  document.getElementById('th-y').textContent = objectiveLabel(oy);
+  document.getElementById('front-meta').textContent =
+    `${currentRun.n_returned} 个方案 · ${currentRun.solver}`;
+  document.getElementById('front-note').textContent =
+    `本次同时优化：${currentRun.objectives.map(objectiveLabel).join('、')}。` +
+    (currentRun.truncated
+      ? `原始非支配点 ${currentRun.n_generated} 个，超过上限已等距降采样保留 ${currentRun.n_returned} 个（端点必保留）。`
+      : `共评估 ${currentRun.n_evaluated} 个排程，全部为可行方案。`) +
+    ` 运行 ${currentRun.message || ''}`;
+
+  const pts = currentSols
+    .slice()
+    .sort((a, b) => a.pareto_rank - b.pareto_rank)
+    .map(s => ({
+      x: solutionObjective(s, ox), y: solutionObjective(s, oy),
+      label: '#' + s.pareto_rank, payload: s.id,
+    }));
+  scatterChart(document.getElementById('front-chart'), {
+    series: [{ name: 'Pareto 前沿', color: '#2563eb', points: pts }],
+    xLabel: objectiveShort(ox), yLabel: objectiveShort(oy),
+    onPoint: (sid) => showDetail(sid),
+  });
+
+  document.getElementById('front-rows').innerHTML = currentSols
+    .slice()
+    .sort((a, b) => a.pareto_rank - b.pareto_rank)
+    .map(s => `
+      <tr style="cursor:pointer" onclick='showDetail(${JSON.stringify(s.id)})'>
+        <td class="num">${s.pareto_rank}</td>
+        <td class="num"><b>${fmt(solutionObjective(s, ox))}</b></td>
+        <td class="num"><b>${fmt(solutionObjective(s, oy))}</b></td>
+        <td>${escapeHtml(solverLabel(s.solver))}</td>
+        <td class="num">${fmt(s.solve_time)}</td>
+        <td><a href="gantt.html?id=${encodeURIComponent(problem.id)}&solution=${encodeURIComponent(s.id)}">甘特图</a></td>
+      </tr>`).join('');
+}
+
+async function showDetail(sid) {
+  const s = currentSols.find(x => x.id === sid)
+    || await api(`/problems/${problem.id}/solutions/${sid}`);
+  if (!currentSols.some(x => x.id === s.id)) currentSols.push(s);
+  document.getElementById('detail-card').style.display = 'block';
+  document.getElementById('detail-title').textContent = `折中方案 #${s.pareto_rank} — ${s.id}`;
+  const cells = currentRun.objectives.map(n =>
+    `<div class="stat"><div class="label">${objectiveLabel(n)}</div>
+      <div class="value">${fmt(solutionObjective(s, n))}</div></div>`);
+  cells.push(`<div class="stat"><div class="label">状态</div><div class="value" style="font-size:18px">${statusLabel(s.status)}</div></div>`);
+  document.getElementById('detail-stats').innerHTML = cells.join('');
+  document.getElementById('detail-meta').textContent =
+    `同一次求解（${currentRun.id}）优化口径：${currentRun.objectives.map(objectiveLabel).join(' + ')}；` +
+    `该方案的这些值已随方案持久化，在对比页/甘特图/报告中显示的是同一组数。`;
+  document.getElementById('detail-gantt').href =
+    `gantt.html?id=${encodeURIComponent(problem.id)}&solution=${encodeURIComponent(s.id)}`;
+  document.getElementById('detail-card').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+load().catch(e => toast(e.message, 'error'));
+</script>
+</body>
+</html>

@@ -93,6 +93,126 @@ function hBarChart(container, { labels, values, height = 260, valueFmt = v => fm
   return svg;
 }
 
+/* Scatter chart for Pareto fronts.
+   series: [{ name, color, points: [{x, y, label, payload}] }]
+   onPoint(payload, point, series) is invoked when a marker is clicked.
+   Rendering is protected against front explosion: each series is capped at
+   maxPoints (server-side downsampling is the primary guard; this is a second
+   net) and a note is shown when capping kicks in. */
+function scatterChart(container, { series, xLabel = 'x', yLabel = 'y',
+  height = 420, maxPoints = 500, onPoint = null, valueFmt = v => fmt(v) }) {
+  const W = 640, H = height, padL = 64, padR = 18, padT = 18, padB = 52;
+  let all = series.flatMap(s => s.points);
+  let cappedNote = '';
+  series = series.map(s => {
+    if (s.points.length > maxPoints) {
+      const pts = [];
+      const seen = new Set();
+      for (let i = 0; i < maxPoints; i++) {
+        const idx = Math.round(i * (s.points.length - 1) / (maxPoints - 1));
+        if (!seen.has(idx)) { seen.add(idx); pts.push(s.points[idx]); }
+      }
+      cappedNote = `（仅绘制每族前 ${maxPoints} 点；完整数据已在求解端降采样）`;
+      return { ...s, points: pts };
+    }
+    return s;
+  });
+  all = series.flatMap(s => s.points);
+  const svg = _svg(container, W, H);
+  if (!all.length) {
+    _axis(svg, W / 2, H / 2, '暂无前沿数据', { size: 13 });
+    return svg;
+  }
+  const xs = all.map(p => p.x), ys = all.map(p => p.y);
+  let minX = Math.min(...xs), maxX = Math.max(...xs);
+  let minY = Math.min(...ys), maxY = Math.max(...ys);
+  if (minX === maxX) { minX -= 1; maxX += 1; }
+  if (minY === maxY) { minY -= 1; maxY += 1; }
+  const padX = (maxX - minX) * 0.08, padY = (maxY - minY) * 0.08;
+  minX -= padX; maxX += padX; minY -= padY; maxY += padY;
+  const innerW = W - padL - padR, innerH = H - padT - padB;
+  const X = v => padL + innerW * (v - minX) / (maxX - minX);
+  const Y = v => padT + innerH - innerH * (v - minY) / (maxY - minY);
+
+  for (let i = 0; i <= 4; i++) {
+    const vx = minX + (maxX - minX) * i / 4;
+    const vy = minY + (maxY - minY) * i / 4;
+    const gx = X(vx), gy = Y(vy);
+    let lx = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    lx.setAttribute('x1', gx); lx.setAttribute('y1', padT);
+    lx.setAttribute('x2', gx); lx.setAttribute('y2', padT + innerH);
+    lx.setAttribute('stroke', '#f3f4f6'); svg.appendChild(lx);
+    let ly = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    ly.setAttribute('x1', padL); ly.setAttribute('y1', gy);
+    ly.setAttribute('x2', padL + innerW); ly.setAttribute('y2', gy);
+    ly.setAttribute('stroke', '#f3f4f6'); svg.appendChild(ly);
+    _axis(svg, gx, padT + innerH + 14, valueFmt(vx), { size: 9 });
+    _axis(svg, padL - 8, gy + 3, valueFmt(vy), { anchor: 'end', size: 9 });
+  }
+  // axes
+  const ax = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+  ax.setAttribute('x1', padL); ax.setAttribute('y1', padT + innerH);
+  ax.setAttribute('x2', padL + innerW); ax.setAttribute('y2', padT + innerH);
+  ax.setAttribute('stroke', '#9ca3af'); svg.appendChild(ax);
+  const ay = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+  ay.setAttribute('x1', padL); ay.setAttribute('y1', padT);
+  ay.setAttribute('x2', padL); ay.setAttribute('y2', padT + innerH);
+  ay.setAttribute('stroke', '#9ca3af'); svg.appendChild(ay);
+
+  // connect points within each series to visualise the front line
+  series.forEach(s => {
+    const ordered = [...s.points].sort((a, b) => a.x - b.x);
+    if (ordered.length > 1) {
+      let d = '';
+      ordered.forEach((p, i) => { d += (i ? 'L' : 'M') + X(p.x) + ' ' + Y(p.y) + ' '; });
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      path.setAttribute('d', d); path.setAttribute('fill', 'none');
+      path.setAttribute('stroke', s.color || '#4e79a7');
+      path.setAttribute('stroke-width', 1.5); path.setAttribute('stroke-dasharray', '4 3');
+      path.setAttribute('opacity', 0.55);
+      svg.appendChild(path);
+    }
+  });
+
+  // points
+  series.forEach(s => {
+    s.points.forEach(p => {
+      const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      c.setAttribute('cx', X(p.x)); c.setAttribute('cy', Y(p.y));
+      c.setAttribute('r', p.r || 4.5);
+      c.setAttribute('fill', s.color || '#4e79a7');
+      c.setAttribute('stroke', '#fff'); c.setAttribute('stroke-width', 1.5);
+      c.style.cursor = onPoint ? 'pointer' : 'default';
+      const title = document.createElementNS('http://www.w3.org/2000/svg', 'title');
+      title.textContent = (p.label != null ? p.label + '  ' : '') +
+        `${xLabel}=${valueFmt(p.x)}, ${yLabel}=${valueFmt(p.y)}`;
+      c.appendChild(title);
+      if (onPoint) c.addEventListener('click', () => onPoint(p.payload, p, s));
+      svg.appendChild(c);
+    });
+  });
+
+  _axis(svg, padL + innerW / 2, H - 8, xLabel, { size: 12 });
+  const yt = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+  yt.setAttribute('transform', `translate(16 ${padT + innerH / 2}) rotate(-90)`);
+  yt.setAttribute('text-anchor', 'middle'); yt.setAttribute('font-size', 12);
+  yt.setAttribute('fill', '#374151'); yt.textContent = yLabel;
+  svg.appendChild(yt);
+
+  if (series.length > 1) {
+    let hx = padL;
+    series.forEach(s => {
+      const sp = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      sp.setAttribute('cx', hx + 5); sp.setAttribute('cy', padT - 4); sp.setAttribute('r', 4.5);
+      sp.setAttribute('fill', s.color || '#4e79a7'); svg.appendChild(sp);
+      _axis(svg, hx + 12, padT, s.name, { anchor: 'start', size: 10 });
+      hx += 22 + Math.max(60, s.name.length * 7);
+    });
+  }
+  if (cappedNote) _axis(svg, padL + innerW, H - 8, cappedNote, { anchor: 'end', size: 9 });
+  return svg;
+}
+
 /* Simple line chart with dots. */
 function lineChart(container, { labels, values, height = 240, color = '#2563eb', valueFmt = v => fmt(v) }) {
   const W = 560, H = height, padL = 46, padB = 40, padT = 16;

@@ -279,7 +279,10 @@ def build(problem: models.Problem) -> LPModel:
     note = ""
     if primitives.get("cost"):
         note = "cost term is constant w.r.t. start times and is ignored in the LP/IP objective"
-
+    if primitives.get("overtime_cost"):
+        note = ("overtime_cost is schedule-dependent and not modelled in the "
+                "time-indexed LP/IP; use the multi-objective NSGA-II engine for "
+                "makespan/overtime trade-offs")
     return LPModel(c, A_ub, b_ub, A_eq, b_eq, vars_, index, note)
 
 

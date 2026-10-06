@@ -56,6 +56,26 @@ def resource_cost(problem: models.Problem, starts: Dict[str, int]) -> float:
     return cost
 
 
+def overtime_cost(problem: models.Problem, starts: Dict[str, int]) -> float:
+    """Cost charged for work performed in slots that are usable but outside
+    the resource's regular shift (``regular_hours``).  Resources without a
+    defined regular shift contribute nothing.  The charge per occupied slot
+    is requirement-units * ``overtime_cost_per_unit``."""
+    rmap = problem.resource_map()
+    tmap = problem.task_map()
+    cost = 0.0
+    for t, s in starts.items():
+        task = tmap[t]
+        for r, amount in task.resource_requirements.items():
+            resource = rmap.get(r)
+            if resource is None or resource.regular_hours is None:
+                continue
+            for slot in range(s, s + task.duration):
+                if resource.available_at(slot) and not resource.regular_at(slot):
+                    cost += amount * resource.overtime_cost_per_unit
+    return cost
+
+
 # Primitive objective evaluators -------------------------------------------------- #
 
 _PRIMITIVES = {
@@ -64,7 +84,20 @@ _PRIMITIVES = {
     "weighted_completion": weighted_completion,
     "tardiness": total_tardiness,
     "cost": resource_cost,
+    "overtime_cost": overtime_cost,
 }
+
+# The canonical, ordered objective vector attached to EVERY solution.  All
+# pages read solution.objectives[name] against this fixed vocabulary, which is
+# what keeps the numbers identical across results / compare / Gantt / report.
+CANONICAL_OBJECTIVES = (
+    "makespan",
+    "total_completion",
+    "weighted_completion",
+    "tardiness",
+    "cost",
+    "overtime_cost",
+)
 
 
 def evaluate_primitive(name: str, problem: models.Problem,
@@ -72,6 +105,14 @@ def evaluate_primitive(name: str, problem: models.Problem,
     if name not in _PRIMITIVES:
         raise ValueError(f"unknown primitive objective: {name}")
     return float(_PRIMITIVES[name](problem, starts))
+
+
+def canonical_objectives(problem: models.Problem,
+                         starts: Dict[str, int]) -> Dict[str, float]:
+    """The full objective vector for a schedule (rounded to 4 decimals so the
+    stored values are exactly what every page displays)."""
+    return {name: round(evaluate_primitive(name, problem, starts), 4)
+            for name in CANONICAL_OBJECTIVES}
 
 
 def evaluate_objective(problem: models.Problem,
@@ -286,6 +327,7 @@ def compute_metrics(problem: models.Problem,
         "weighted_completion": round(weighted_completion(problem, starts), 3),
         "total_tardiness": round(total_tardiness(problem, starts), 3),
         "resource_cost": round(resource_cost(problem, starts), 3),
+        "overtime_cost": round(overtime_cost(problem, starts), 3),
         "soft_penalty": round(soft_penalty(problem, starts), 3),
         "utilisation": utilisation,
         "n_violations": len(hard_violations(problem, starts)),

@@ -16,7 +16,7 @@ import json
 import sys
 from typing import Any, Dict, List
 
-from backend import models, report, seed, sensitivity, storage
+from backend import models, multiobjective, report, seed, sensitivity, storage
 from backend.solvers import base as solver_base
 
 
@@ -111,6 +111,29 @@ def cmd_report(args) -> None:
     print(rep.content)
 
 
+def cmd_pareto(args) -> None:
+    p = storage.load_problem(args.id)
+    if p is None:
+        print(f"no such problem: {args.id}")
+        sys.exit(1)
+    params = dict(multiobjective.DEFAULT_PARAMS)
+    params.update(_parse_params(args.params))
+    objectives = args.objectives or ["makespan", "overtime_cost"]
+    run, sols = multiobjective.run_pareto(p, objectives, params)
+    storage.save_pareto_bundle(args.id, run, sols)
+    print(f"pareto run {run.id}: solver={run.solver} "
+          f"objectives={'+'.join(run.objectives)} points={run.n_returned} "
+          f"(generated={run.n_generated}, evaluated={run.n_evaluated}, "
+          f"truncated={run.truncated}) time={run.solve_time}s")
+    header = "rank  " + "  ".join(f"{o:>18s}" for o in run.objectives) + "  solution"
+    print(header)
+    for s in sols:
+        vals = "  ".join(f"{s.objectives[o]:18.4f}" for o in run.objectives)
+        print(f"{s.pareto_rank:>4d}  {vals}  {s.id}")
+    if args.json:
+        print(json.dumps(run.to_dict(), ensure_ascii=False, indent=2))
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="OR scheduling CLI")
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -150,6 +173,16 @@ def main() -> None:
     p_rep.add_argument("id")
     p_rep.add_argument("--solutions", nargs="*", default=[])
     p_rep.set_defaults(func=cmd_report)
+
+    p_pareto = sub.add_parser("pareto",
+                              help="multi-objective Pareto-front solve")
+    p_pareto.add_argument("id")
+    p_pareto.add_argument("--objectives", nargs="*",
+                          default=["makespan", "overtime_cost"],
+                          help="objectives to optimise jointly")
+    p_pareto.add_argument("--params", nargs="*", default=[])
+    p_pareto.add_argument("--json", action="store_true")
+    p_pareto.set_defaults(func=cmd_pareto)
 
     args = parser.parse_args()
     args.func(args)

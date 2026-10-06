@@ -1,7 +1,7 @@
 {
   "id": "demo_jobshop",
   "name": "作业车间示例",
-  "description": "3 个作业在 2 台机器上加工，含先后顺序链，目标为最小化完工时间。",
+  "description": "3 个作业在 2 台机器上加工，含先后顺序链。机器分正常班次与加班时段：赶工期要吃加班，等班次则完工更晚，是完工时间/加班成本双目标折中的典型场景。",
   "horizon": 40,
   "time_unit": "小时",
   "resources": [
@@ -12,7 +12,18 @@
       "capacity": 1,
       "skills": [],
       "cost_per_unit": 5.0,
-      "availability": null
+      "availability": null,
+      "regular_hours": [
+        [
+          0,
+          8
+        ],
+        [
+          24,
+          32
+        ]
+      ],
+      "overtime_cost_per_unit": 4.0
     },
     {
       "id": "M2",
@@ -21,7 +32,18 @@
       "capacity": 1,
       "skills": [],
       "cost_per_unit": 8.0,
-      "availability": null
+      "availability": null,
+      "regular_hours": [
+        [
+          0,
+          8
+        ],
+        [
+          24,
+          32
+        ]
+      ],
+      "overtime_cost_per_unit": 6.0
     }
   ],
   "tasks": [

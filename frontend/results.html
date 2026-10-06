@@ -29,8 +29,9 @@
     <div class="card">
       <h2>求解方案</h2>
       <table><thead><tr>
-        <th>求解器</th><th>状态</th><th class="num">目标值</th><th class="num">完工时间</th>
-        <th class="num">拖期</th><th class="num">成本</th><th class="num">耗时(s)</th><th></th>
+        <th>求解器</th><th>来源</th><th>状态</th><th>优化口径</th><th class="num">标量目标值</th>
+        <th class="num">完工时间</th><th class="num">加班</th><th class="num">拖期</th>
+        <th class="num">成本</th><th class="num">耗时(s)</th><th></th>
       </tr></thead><tbody id="rows"></tbody></table>
     </div>
 
@@ -75,22 +76,63 @@ function renderTable() {
   document.getElementById('rows').innerHTML = solutions.map(s => `
     <tr style="cursor:pointer" onclick="showDetail('${s.id}')">
       <td>${escapeHtml(solverLabel(s.solver))}</td>
+      <td>${s.pareto_run_id
+        ? `<span class="badge info">前沿#${s.pareto_rank ?? ''}</span>`
+        : '<span class="muted">单目标</span>'}</td>
       <td>${statusBadge(s.status)}</td>
+      <td class="small">${escapeHtml(optimizedObjectives(s).map(objectiveLabel).join(' + '))}</td>
       <td class="num"><b>${fmt(s.objective_value)}</b></td>
-      <td class="num">${fmt(s.makespan)}</td>
-      <td class="num">${fmt(s.metrics?.total_tardiness)}</td>
-      <td class="num">${fmt(s.metrics?.resource_cost)}</td>
+      <td class="num">${fmt(solutionObjective(s, 'makespan'))}</td>
+      <td class="num">${fmt(solutionObjective(s, 'overtime_cost'))}</td>
+      <td class="num">${fmt(solutionObjective(s, 'tardiness'))}</td>
+      <td class="num">${fmt(solutionObjective(s, 'cost'))}</td>
       <td class="num">${fmt(s.solve_time)}</td>
       <td><button class="btn sm" onclick="event.stopPropagation();loadDetail('${s.id}')">查看</button></td>
-    </tr>`).join('') || '<tr><td colspan="8" class="empty">暂无求解结果。</td></tr>';
+    </tr>`).join('') || '<tr><td colspan="11" class="empty">暂无求解结果。</td></tr>';
 }
 
 function renderObjectiveChart() {
   const el = document.getElementById('obj-chart');
+  // Pareto points have no scalar value; draw their makespan/overtime front as
+  // a 2-D chart, while scalar solutions keep their makespan bar comparison.
+  const paretoGroups = new Map();
+  const scalar = [];
+  for (const s of solutions) {
+    if (s.pareto_run_id) {
+      if (!paretoGroups.has(s.pareto_run_id)) paretoGroups.set(s.pareto_run_id, []);
+      paretoGroups.get(s.pareto_run_id).push(s);
+    } else {
+      scalar.push(s);
+    }
+  }
   if (!solutions.length) { el.innerHTML = '<div class="empty">暂无数据。</div>'; return; }
+  if (paretoGroups.size) {
+    const palette = ['#2563eb', '#7e22ce', '#0d9488', '#b45309'];
+    const series = [];
+    let gi = 0;
+    for (const [runId, members] of paretoGroups) {
+      series.push({
+        name: `前沿 ${runId.slice(-6)}`, color: palette[gi++ % palette.length],
+        points: members.map(s => ({
+          x: solutionObjective(s, 'makespan'),
+          y: solutionObjective(s, 'overtime_cost'),
+          label: '#' + (s.pareto_rank ?? ''),
+        })),
+      });
+    }
+    if (scalar.length) {
+      series.push({ name: '单目标方案', color: '#e15759',
+        points: scalar.map(s => ({ x: solutionObjective(s, 'makespan'),
+          y: solutionObjective(s, 'overtime_cost'),
+          label: solverLabel(s.solver), r: 6 })) });
+    }
+    scatterChart(el, { series, xLabel: objectiveShort('makespan'),
+      yLabel: objectiveShort('overtime_cost') });
+    return;
+  }
   barChart(el, {
-    labels: solutions.map(s => solverLabel(s.solver)),
-    values: solutions.map(s => s.objective_value ?? 0),
+    labels: scalar.map(s => solverLabel(s.solver)),
+    values: scalar.map(s => s.objective_value ?? 0),
     color: '#4e79a7',
   });
 }
@@ -102,16 +144,21 @@ async function loadDetail(id) {
   const s = await api(`/problems/${problem.id}/solutions/${id}`);
   document.getElementById('detail-card').style.display = 'block';
   document.getElementById('detail-title').textContent = `方案详情 — ${solverLabel(s.solver)}`;
-  document.getElementById('detail-stats').innerHTML = [
-    ['目标值', fmt(s.objective_value)], ['完工时间', fmt(s.makespan)],
-    ['状态', statusLabel(s.status)], ['耗时', fmt(s.solve_time) + 's'],
-  ].map(([l, v]) => `<div class="stat"><div class="label">${l}</div><div class="value">${v}</div></div>`).join('');
+  const optLine = `优化口径：${optimizedObjectives(s).map(objectiveLabel).join(' + ')}`
+    + (s.pareto_run_id ? `（Pareto 前沿 ${s.pareto_run_id} #${s.pareto_rank}）` : '');
+  const stats = [
+    ['标量目标值', fmt(s.objective_value)], ['完工时间', fmt(solutionObjective(s, 'makespan'))],
+    ['加班成本', fmt(solutionObjective(s, 'overtime_cost'))],
+    ['状态', statusLabel(s.status)],
+  ].map(([l, v]) => `<div class="stat"><div class="label">${l}</div><div class="value">${v}</div></div>`);
+  document.getElementById('detail-stats').innerHTML =
+    stats.join('') + `<div class="stat" style="grid-column:1/-1"><div class="label">${optLine}</div></div>`;
 
   const m = s.metrics || {};
   barChart(document.getElementById('comp-chart'), {
-    labels: ['完工时间', '加权\n完工时间', '拖期', '成本', '软约束\n惩罚'],
+    labels: ['完工时间', '加权\n完工时间', '拖期', '成本', '加班\n成本', '软约束\n惩罚'],
     values: [m.makespan || 0, m.weighted_completion || 0, m.total_tardiness || 0,
-             m.resource_cost || 0, m.soft_penalty || 0],
+             m.resource_cost || 0, m.overtime_cost || 0, m.soft_penalty || 0],
     color: '#f28e2b',
   });
 

@@ -30,7 +30,8 @@
       <table class="mt">
         <thead><tr>
           <th>ID</th><th>名称</th><th>类型</th><th class="num">容量</th>
-          <th>技能</th><th class="num">单位成本</th><th>可用时段</th><th></th>
+          <th>技能</th><th class="num">单位成本</th><th>可用时段</th>
+          <th class="num">加班单价</th><th>正常班次</th><th></th>
         </tr></thead>
         <tbody id="rows"></tbody>
       </table>
@@ -45,8 +46,12 @@
         <div><label>容量</label><input id="f-capacity" type="number" step="0.5" value="1"></div>
         <div class="full"><label>技能（逗号分隔）</label><input id="f-skills" placeholder="护士, 司机"></div>
         <div><label>单位时间成本</label><input id="f-cost" type="number" step="0.1" value="0"></div>
+        <div><label>加班单价（每容量·每时段）</label><input id="f-otcost" type="number" step="0.1" value="0"></div>
         <div><label>可用时段（如 0-40,60-80 ；留空 = 始终可用）</label>
           <input id="f-avail" placeholder="0-40, 60-80"></div>
+        <div class="full"><label>正常班次窗口（如 0-8,24-32 ；留空 = 全部算正常，无加班）
+          窗口之外、可用时段之内的占用按加班单价计费</label>
+          <input id="f-regular" placeholder="0-8, 24-32"></div>
       </div>
       <div class="btn-row">
         <button class="btn primary" onclick="saveForm()">保存</button>
@@ -66,7 +71,7 @@ initSidebar('resources.html');
 
 async function load() {
   const id = currentProblemId();
-  if (!id) { document.getElementById('rows').innerHTML = '<tr><td colspan="8" class="empty">未选择问题实例。</td></tr>'; return; }
+  if (!id) { document.getElementById('rows').innerHTML = '<tr><td colspan="10" class="empty">未选择问题实例。</td></tr>'; return; }
   problem = await api('/problems/' + id);
   render();
 }
@@ -81,17 +86,20 @@ function render() {
       <td>${escapeHtml((r.skills || []).join(', ') || '—')}</td>
       <td class="num">${fmt(r.cost_per_unit)}</td>
       <td class="small mono">${escapeHtml(r.availability ? JSON.stringify(r.availability) : '始终可用')}</td>
+      <td class="num">${r.regular_hours ? fmt(r.overtime_cost_per_unit) : '—'}</td>
+      <td class="small mono">${escapeHtml(r.regular_hours ? JSON.stringify(r.regular_hours) : '无（全正常）')}</td>
       <td>
         <button class="btn sm" onclick='editResource("${escapeHtml(r.id)}")'>编辑</button>
         <button class="btn sm danger" onclick='removeResource("${escapeHtml(r.id)}")'>删除</button>
       </td>
-    </tr>`).join('') || '<tr><td colspan="8" class="empty">暂无资源。</td></tr>';
+    </tr>`).join('') || '<tr><td colspan="10" class="empty">暂无资源。</td></tr>';
 }
 
 function showForm() { editing = null; document.getElementById('form-title').textContent = '新增资源';
-  ['f-id','f-name','f-skills','f-avail'].forEach(k => document.getElementById(k).value = '');
+  ['f-id','f-name','f-skills','f-avail','f-regular'].forEach(k => document.getElementById(k).value = '');
   document.getElementById('f-type').value = 'personnel'; document.getElementById('f-capacity').value = 1;
-  document.getElementById('f-cost').value = 0; document.getElementById('f-id').disabled = false;
+  document.getElementById('f-cost').value = 0; document.getElementById('f-otcost').value = 0;
+  document.getElementById('f-id').disabled = false;
   document.getElementById('form-card').style.display = 'block'; }
 
 function editResource(id) {
@@ -102,7 +110,9 @@ function editResource(id) {
   document.getElementById('f-type').value = r.type; document.getElementById('f-capacity').value = r.capacity;
   document.getElementById('f-skills').value = (r.skills || []).join(', ');
   document.getElementById('f-cost').value = r.cost_per_unit;
+  document.getElementById('f-otcost').value = r.overtime_cost_per_unit ?? 0;
   document.getElementById('f-avail').value = (r.availability || []).map(a => a.join('-')).join(', ');
+  document.getElementById('f-regular').value = (r.regular_hours || []).map(a => a.join('-')).join(', ');
   document.getElementById('f-id').disabled = true;
   document.getElementById('form-card').style.display = 'block';
 }
@@ -125,7 +135,9 @@ function saveForm() {
     capacity: parseFloat(document.getElementById('f-capacity').value) || 0,
     skills: document.getElementById('f-skills').value.split(',').map(s => s.trim()).filter(Boolean),
     cost_per_unit: parseFloat(document.getElementById('f-cost').value) || 0,
+    overtime_cost_per_unit: parseFloat(document.getElementById('f-otcost').value) || 0,
     availability: parseAvailability(document.getElementById('f-avail').value),
+    regular_hours: parseAvailability(document.getElementById('f-regular').value),
   };
   if (!r.id) return toast('资源 ID 不能为空', 'error');
   if (editing) {

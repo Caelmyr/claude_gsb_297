@@ -32,6 +32,7 @@ OBJECTIVE_TYPES = (
     "weighted_completion",      # min sum weight_i * C_i
     "tardiness",                # min sum weight_i * max(0, C_i - due_i)
     "cost",                     # min resource usage cost
+    "overtime_cost",            # min cost of work scheduled outside regular hours
     "custom",                   # weighted combination of the primitives
 )
 
@@ -90,6 +91,14 @@ class Resource:
     skills: List[str] = field(default_factory=list)
     cost_per_unit: float = 0.0              # cost per unit-time of use
     availability: Optional[List[List[int]]] = None   # [[start, end), ...]
+    # Half-open [start, end) intervals during which the resource works its
+    # REGULAR shift.  Slots inside ``availability`` but outside these windows
+    # are overtime, charged at ``overtime_cost_per_unit`` per unit-time per
+    # capacity unit occupied.  ``None`` means every available slot is regular
+    # (no overtime possible); this is what makes overtime cost a schedule-
+    # dependent objective that trades off against makespan.
+    regular_hours: Optional[List[List[int]]] = None
+    overtime_cost_per_unit: float = 0.0
 
     def __post_init__(self) -> None:
         if self.type not in RESOURCE_TYPES:
@@ -101,6 +110,13 @@ class Resource:
         if self.availability is None:
             return True
         return any(a <= t < b for (a, b) in self.availability)
+
+    def regular_at(self, t: int) -> bool:
+        """True when slot ``t`` falls inside the resource's regular shift.
+        ``regular_hours is None`` means every slot is regular."""
+        if self.regular_hours is None:
+            return True
+        return any(a <= t < b for (a, b) in self.regular_hours)
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -328,6 +344,19 @@ class Solution:
     solve_time: float = 0.0
     message: str = ""
     lower_bound: Optional[float] = None
+    # Canonical objective vector: name -> value, computed ONCE at solve time
+    # for EVERY primitive the system knows how to report.  This is the single
+    # source of truth shared by the results/compare/report pages so that the
+    # two objective values of a Pareto solution never change between screens.
+    objectives: Dict[str, float] = field(default_factory=dict)
+    # Which objectives THIS run actually optimised (identical for every
+    # solution produced by the same run).  Single-objective runs carry a
+    # one-element list; Pareto runs carry two (or more).  Always paired with
+    # the values in ``objectives``.
+    optimized_objectives: List[str] = field(default_factory=list)
+    # Pareto bookkeeping; None for ordinary single-objective solutions.
+    pareto_run_id: Optional[str] = None
+    pareto_rank: Optional[int] = None
     created_at: str = field(default_factory=now_iso)
     version: int = 1
 
@@ -398,6 +427,62 @@ class Report:
 
     @classmethod
     def from_dict(cls, d: Dict[str, Any]) -> "Report":
+        return cls(**d)
+
+
+@dataclass
+class ParetoPoint:
+    """One non-dominated solution on a Pareto front (a light pointer)."""
+    solution_id: str
+    rank: int
+    objectives: Dict[str, float] = field(default_factory=dict)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, d: Dict[str, Any]) -> "ParetoPoint":
+        return cls(**d)
+
+
+@dataclass
+class ParetoRun:
+    """The batch artefact produced by one multi-objective solve.
+
+    The individual trade-off solutions are stored as ordinary ``Solution``
+    records (each carrying ``pareto_run_id``); this object is the run-level
+    header that ties them together and records exactly which objectives were
+    optimised and what the front looked like.  It is what the history page and
+    reports refer to when showing a frontier.
+    """
+    id: str
+    problem_id: str
+    solver: str
+    objectives: List[str] = field(default_factory=list)   # optimised objective names (ordered)
+    minimize: List[bool] = field(default_factory=list)
+    points: List[ParetoPoint] = field(default_factory=list)
+    params: Dict[str, Any] = field(default_factory=dict)
+    status: str = "feasible"
+    n_evaluated: int = 0
+    n_generated: int = 0           # non-dominated points before downsampling
+    n_returned: int = 0            # points actually stored (after cap)
+    truncated: bool = False
+    solve_time: float = 0.0
+    message: str = ""
+    created_at: str = field(default_factory=now_iso)
+
+    def to_dict(self) -> Dict[str, Any]:
+        d = asdict(self)
+        d["points"] = [p.to_dict() if isinstance(p, ParetoPoint) else p
+                       for p in self.points]
+        return d
+
+    @classmethod
+    def from_dict(cls, d: Dict[str, Any]) -> "ParetoRun":
+        d = dict(d)
+        d["points"] = [ParetoPoint.from_dict(p) for p in d.get("points", [])]
+        # tolerate older records / forward-compatible unknown keys
+        d = {k: v for k, v in d.items() if k in cls.__dataclass_fields__}
         return cls(**d)
 
 
